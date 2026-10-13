@@ -1,0 +1,76 @@
+# =============================================================================
+# FreshCart: THE COMPANY (its database, its business, its exchange-rate provider)
+# Do not change these three services. Add YOUR data platform below them
+# (warehouse, loaders, dbt, Airflow...): containers in this file can reach the
+# company by name: source-db:5432, fx-api:8000.
+# =============================================================================
+services:
+  # ---------------------------------------------------------------- the company's database
+  source-db:
+    image: postgres:16
+    container_name: freshcart-source-db
+    environment:
+      POSTGRES_DB: freshcart_source
+      POSTGRES_USER: ${SOURCE_DB_USER}
+      POSTGRES_PASSWORD: ${SOURCE_DB_PASSWORD}
+      TZ: Africa/Cairo                      # show times in Cairo time
+      PGTZ: Africa/Cairo
+    ports:
+      - "5433:5432"
+    volumes:
+      - source_db_data:/var/lib/postgresql/data
+      - ./source_db/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:                            # "healthy" = ready to accept connections
+      test: ["CMD-SHELL", "pg_isready -U ${SOURCE_DB_USER} -d freshcart_source"]
+      interval: 5s
+      retries: 20
+
+  # ---------------------------------------------------------------- keeps the company alive
+  simulator:
+    build: ./simulator
+    container_name: freshcart-simulator
+    environment:
+      SOURCE_DB_HOST: source-db
+      SOURCE_DB_PORT: "5432"
+      SOURCE_DB_USER: ${SOURCE_DB_USER}
+      SOURCE_DB_PASSWORD: ${SOURCE_DB_PASSWORD}
+      COURSE_START_DATE: ${COURSE_START_DATE}
+      COURSE_END_DATE: ${COURSE_END_DATE}
+      HISTORY_DAYS: ${HISTORY_DAYS}
+      ORDERS_PER_DAY: ${ORDERS_PER_DAY}
+      N_CUSTOMERS: ${N_CUSTOMERS}
+      N_PRODUCTS: ${N_PRODUCTS}
+      SIM_SEED: ${SIM_SEED}
+      SIM_FAKE_NOW: ${SIM_FAKE_NOW:-}
+      SUPPLIER_DIR: /data/suppliers
+      SOURCE_READER_PASSWORD: ${SOURCE_READER_PASSWORD}   # creates the read-only account
+    volumes:
+      - ./source_files/suppliers:/data/suppliers   # supplier files land in this project folder
+    depends_on:
+      source-db:
+        condition: service_healthy          # wait until the database is ready
+    restart: unless-stopped                 # starts again automatically with Docker
+
+  # ---------------------------------------------------------------- external exchange-rate provider
+  fx-api:
+    build: ./simulator                      # same image as the simulator (same FX formula)
+    container_name: freshcart-fx-api
+    command: ["fx-api"]
+    environment:
+      SIM_SEED: ${SIM_SEED}
+      COURSE_START_DATE: ${COURSE_START_DATE}
+      SIM_FAKE_NOW: ${SIM_FAKE_NOW:-}
+      FX_API_KEY: ${FX_API_KEY}
+    ports:
+      - "8000:8000"                         # from your laptop: http://localhost:8000
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 10s
+      retries: 5
+    restart: unless-stopped
+
+
+  # ---------------------------------------------------------------- YOUR PLATFORM STARTS HERE
+
+volumes:
+  source_db_data:
