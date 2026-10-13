@@ -5,3 +5,5 @@ __pycache__/
 !simulator/simulator/*.pyc
 dbt/target/
 dbt/logs/
+
+.idea/
