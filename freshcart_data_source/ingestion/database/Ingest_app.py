@@ -36,10 +36,16 @@ import argparse
 import datetime as dt
 import os
 import uuid
+from pathlib import Path
 from zoneinfo import ZoneInfo  # needs up-to-date tzdata (Egypt DST since 2023)
 
+from dotenv import load_dotenv
 import clickhouse_connect
 import sqlalchemy as sa
+
+# Auto-load .env from the project root (works regardless of cwd)
+_env_file = Path(__file__).resolve().parents[2] / ".env"
+load_dotenv(_env_file)
 
 # ------------------------------------------------------------------ settings
 # PostgreSQL source
@@ -251,13 +257,25 @@ def init():
     ch.command(f"CREATE DATABASE IF NOT EXISTS {DB}")       # freshcart_dwh (for the log)
     ch.command(f"CREATE DATABASE IF NOT EXISTS {BRONZE_DB}")  # bronze_app (the bronze schema)
     for t in SOURCE_TABLES:
-        cols = [f"{c.name} {ch_type(c)}" for c in pg_table(t).columns]
+        pg_cols = {c.name: c for c in pg_table(t).columns}
         order = ", ".join(pk_cols(t))
-        ddl = (f"CREATE TABLE IF NOT EXISTS {tbl(t)} (\n  " + ",\n  ".join(cols) +
+        col_defs = [f"{c.name} {ch_type(c)}" for c in pg_cols.values()]
+        ddl = (f"CREATE TABLE IF NOT EXISTS {tbl(t)} (\n  " + ",\n  ".join(col_defs) +
                f"\n) ENGINE = MergeTree"
                f" PARTITION BY toDate({CHG}, 'Africa/Cairo')"
                f" ORDER BY ({order})")
         ch.command(ddl)
+
+        # --- schema evolution: add any new Postgres columns missing in ClickHouse ---
+        existing_ch_cols = {
+            row[0] for row in
+            ch.query(f"SELECT name FROM system.columns WHERE database='{BRONZE_DB}' AND table='{t}'").result_rows
+        }
+        for col_name, col in pg_cols.items():
+            if col_name not in existing_ch_cols:
+                ch.command(f"ALTER TABLE {tbl(t)} ADD COLUMN IF NOT EXISTS {col_name} {ch_type(col)}")
+                print(f"[{t}] ⚠ added missing column: {col_name} {ch_type(col)}")
+
         print(f"[{t}] ready: {tbl(t)}")
     ch.command(f"""
         CREATE TABLE IF NOT EXISTS {LOG} (
