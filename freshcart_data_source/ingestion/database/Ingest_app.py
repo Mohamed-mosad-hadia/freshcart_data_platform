@@ -31,7 +31,6 @@ Secrets are read with os.environ, so load your .env into the shell first:
      SOURCE_DB_USER, SOURCE_DB_PASSWORD      (PostgreSQL)
      CLICKHOUSE_PASSWORD                     (ClickHouse)
 Non-secret settings (hosts, ports, database names) are plain constants below.
-Install: pip install sqlalchemy "psycopg[binary]" clickhouse-connect tzdata
 """
 import argparse
 import datetime as dt

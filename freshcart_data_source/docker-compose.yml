@@ -76,7 +76,7 @@ services:
     restart: unless-stopped
 
   # ---------------------------------------------------------------- YOUR PLATFORM STARTS HERE
-
+  # CLickHouse
   clickhouse:
     image: clickhouse/clickhouse-server:latest
     container_name: clickhouse
@@ -95,3 +95,6 @@ services:
 volumes:
   source_db_data:
   clickhouse_data:
+
+# Airflow
+
