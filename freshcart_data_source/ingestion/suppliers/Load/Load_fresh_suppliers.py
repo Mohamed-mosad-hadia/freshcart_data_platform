@@ -2,7 +2,7 @@
 
 Validate each file, reuse the ClickHouse connection, create matching tables,
 resume missing rows, and record completed files so reruns do not duplicate data.
-Run with: python -m ingestion.suppliers.Load_suppliers
+Run with: python -m ingestion.suppliers.Load.Load_fresh_suppliers
 """
 
 import csv
@@ -13,7 +13,7 @@ from pathlib import Path
 from uuid import uuid4
 
 from ingestion.fx_api.connection_clickhouse import connection_clickhouse
-from ingestion.suppliers.DDL_suppliers import (
+from ingestion.suppliers.DDL.DDL_fresh_suppliers import (
     BRONZE_DB,
     LEDGER_TABLE,
     ensure_data_table,
@@ -24,7 +24,7 @@ from ingestion.suppliers.DDL_suppliers import (
 
 logger = logging.getLogger(__name__)
 
-SOURCE_DIR = Path(__file__).resolve().parents[2] / "source_files" / "suppliers" / "fresh"
+SOURCE_DIR = Path(__file__).resolve().parents[3] / "source_files" / "suppliers" / "fresh"
 INSERT_BATCH_SIZE = 10_000
 
 
