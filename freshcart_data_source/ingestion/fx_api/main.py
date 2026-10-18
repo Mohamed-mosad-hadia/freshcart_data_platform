@@ -10,6 +10,9 @@ currencies, daily rates, and rate history into ClickHouse.
 
 import argparse
 import logging
+from pathlib import Path
+
+from dotenv import load_dotenv
 
 from ingestion.fx_api.DDL.currencies import currencies_table
 from ingestion.fx_api.DDL.health_check import health_check_table
@@ -19,6 +22,10 @@ from ingestion.fx_api.Load.currencies import insert_bronze_currencies
 from ingestion.fx_api.Load.health_check import insert_bronze_health_check
 from ingestion.fx_api.Load.history import insert_bronze_history
 from ingestion.fx_api.Load.rates import insert_bronze_rates
+
+# Load the project-level environment file regardless of the current directory.
+_env_file = Path(__file__).resolve().parents[2] / ".env"
+load_dotenv(_env_file)
 
 logger = logging.getLogger(__name__)
 
