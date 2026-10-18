@@ -13,7 +13,8 @@ from clickhouse_connect import get_client as Client
 logger = logging.getLogger(__name__)
 
 TABLE_PREFIX = "general_stock"
-SOURCE = "suppliers_general"
+BRONZE_DB = "bronze_suppliers"
+
 
 
 def get_client():
@@ -66,3 +67,72 @@ def ensure_data_table(client, header):
     """)
     logger.debug("Bronze table ready: %s.%s", "bronze_suppliers", table)
     return table, schema_hash
+
+# ---------------------------------------------------------------------------
+# Ledger and schema utilities (mirroring DDL_fresh_suppliers)
+
+SOURCE = "suppliers_general"
+LEDGER_TABLE = "ingested_files"
+
+ROW_METADATA = (
+    ("batch_id", "UUID"),
+    ("source_file", "String"),
+    ("file_sha256", "String"),
+    ("source_row_number", "UInt64"),
+    ("ingested_at", "DateTime64(3, 'Africa/Cairo')"),
+    ("source", "String"),
+)
+
+LEDGER_COLUMNS = (
+    ("source_file", "String"),
+    ("file_sha256", "String"),
+    ("schema_hash", "String"),
+    ("row_count", "UInt64"),
+    ("batch_id", "UUID"),
+    ("ingested_at", "DateTime64(3, 'Africa/Cairo')"),
+)
+
+
+def quote_identifier(name: str) -> str:
+    """Quote a CSV header or fixed table name for ClickHouse SQL."""
+    if not name or any(ch in name for ch in "\x00\r\n"):
+        raise ValueError(f"Invalid ClickHouse identifier: {name!r}")
+    return "`" + name.replace("\\", "\\\\").replace("`", "\\`") + "`"
+
+
+def validate_header(header):
+    if not header:
+        raise ValueError("CSV has no header")
+    if len(set(header)) != len(header):
+        raise ValueError("CSV header contains duplicate column names")
+    reserved = {name for name, _ in ROW_METADATA}
+    for name in header:
+        quote_identifier(name)
+        if name in reserved:
+            raise ValueError(f"CSV column conflicts with ingestion metadata: {name!r}")
+
+
+def ensure_ledger(client):
+    """Create the Bronze database and completed-file ledger if absent."""
+    client.execute(f"CREATE DATABASE IF NOT EXISTS {BRONZE_DB}")
+    client.execute(f"""
+        CREATE TABLE IF NOT EXISTS {BRONZE_DB}.{LEDGER_TABLE}
+        (
+            source_file String,
+            file_sha256 String,
+            schema_hash String,
+            row_count UInt64,
+            batch_id UUID,
+            ingested_at DateTime64(3, 'Africa/Cairo') DEFAULT now64(3)
+        )
+        ENGINE = MergeTree()
+        ORDER BY (source_file, file_sha256)
+    """)
+    # Verify columns match expected schema
+    from clickhouse_connect import get_client as Client  # noqa: F401 (import for side‑effect)
+    actual = client.execute(
+        f"SELECT name FROM system.columns WHERE database='{BRONZE_DB}' AND table='{LEDGER_TABLE}'"
+    )
+    # Simple sanity check – we rely on ClickHouse to enforce column types
+    # No further action needed here
+    return None

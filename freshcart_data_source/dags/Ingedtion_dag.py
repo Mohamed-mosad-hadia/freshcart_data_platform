@@ -68,7 +68,8 @@ def task_failure_alert(context):
 
 default_args = {
     "owner": "Ahmed Nabil, Mohamed Mosaad",
-    "depends_on_past": True,               # Backfill runs in chronological order
+    "depends_on_past": False,               # Backfill runs in chronological order
+
     "start_date": datetime(2026, 10, 13),  # Course start date for backfilling
     "end_date": datetime(2026, 10, 26),    # Course end date
     "retries": 3,
