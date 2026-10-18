@@ -2,10 +2,8 @@
 """
 PostgreSQL (SQLAlchemy) -> ClickHouse bronze ingestion.
 
-  python pg_to_ch_bronze.py init                       # create tables in ClickHouse
-  python pg_to_ch_bronze.py full                       # one-time full load (all tables)
-  python pg_to_ch_bronze.py incremental                # catch up all finished Cairo days
-  python pg_to_ch_bronze.py incremental --day 2026-10-12 [--table orders]
+  python Ingest_app.py init                       # create tables in ClickHouse
+  python Ingest_app.py                        # one-time full load or incremental load (all tables)
 
 Design
   * Columns, primary keys, nullability and types are READ FROM POSTGRES (reflection),
