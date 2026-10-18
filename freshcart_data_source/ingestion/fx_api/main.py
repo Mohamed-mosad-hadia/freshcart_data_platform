@@ -10,6 +10,10 @@ currencies, daily rates, and rate history into ClickHouse.
 
 import argparse
 import logging
+import sys
+from pathlib import Path
+
+from dotenv import load_dotenv
 
 from ingestion.fx_api.DDL.currencies import currencies_table
 from ingestion.fx_api.DDL.health_check import health_check_table
