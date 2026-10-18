@@ -8,7 +8,7 @@ import hashlib
 import json
 import logging
 import sys
-from clickhouse_connect import Client
+from clickhouse_connect import get_client as Client
 
 logger = logging.getLogger(__name__)
 
