@@ -8,6 +8,7 @@ Outputs: A row in bronze_fx_api.health_check.
 """
 
 import logging
+import os
 from uuid import uuid4
 
 import requests
@@ -18,10 +19,12 @@ from ingestion.fx_api.connection_clickhouse import connection_clickhouse
 
 logger = logging.getLogger(__name__)
 
+FX_API_BASE_URL = os.environ["FX_API_BASE_URL"].rstrip("/")
+
 
 def insert_bronze_health_check():
-    url = "http://localhost:8000/health"
-    headers = {"X-API-Key": "freshcart-fx-key"}
+    url = f"{FX_API_BASE_URL}/health"
+    headers = {"X-API-Key": os.environ["FX_API_KEY"]}
     batch_id = uuid4()
 
     try:

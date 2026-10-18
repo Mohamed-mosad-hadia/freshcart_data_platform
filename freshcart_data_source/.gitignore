@@ -24,3 +24,19 @@ dbt/target/
 dbt/logs/
 
 .idea/
+
+# Airflow runtime files
+logs/*
+!logs/.gitkeep
+airflow.cfg
+airflow.db
+webserver_config.py
+
+# Logs, editors and OS files
+*.log
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Jupyter
+.ipynb_checkpoints/

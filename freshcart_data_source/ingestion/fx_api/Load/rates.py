@@ -8,6 +8,7 @@ Outputs: A row in bronze_fx_api.rates.
 """
 
 import logging
+import os
 from datetime import date
 from uuid import uuid4
 
@@ -20,9 +21,11 @@ from ingestion.fx_api.connection_clickhouse import connection_clickhouse
 logger = logging.getLogger(__name__)
 
 
+FX_API_BASE_URL = os.environ["FX_API_BASE_URL"].rstrip("/")
+
 def insert_bronze_rates(requested_date="2023-01-01"):
-    url = "http://localhost:8000/v1/rates"
-    headers = {"X-API-Key": "freshcart-fx-key"}
+    url = f"{FX_API_BASE_URL}/v1/rates"
+    headers = {"X-API-Key": os.environ["FX_API_KEY"]}
     if isinstance(requested_date, str):
         requested_date = date.fromisoformat(requested_date)
     batch_id = uuid4()

@@ -22,6 +22,8 @@ from ingestion.fx_api.connection_clickhouse import connection_clickhouse
 
 logger = logging.getLogger(__name__)
 
+FX_API_BASE_URL = os.environ["FX_API_BASE_URL"].rstrip("/")
+
 
 def _rates_in_payload(raw_payload, start=None, end=None):
     """Read rates for window validation and change tracking, without storing them."""
@@ -38,7 +40,7 @@ def _rates_in_payload(raw_payload, start=None, end=None):
 
 
 def insert_bronze_history(start_date=None, end_date=None):
-    url = "http://localhost:8000/v1/rates/history"
+    url = f"{FX_API_BASE_URL}/v1/rates/history"
     api_key = os.getenv("FX_API_KEY")
     if not api_key:
         raise ValueError("Set FX_API_KEY before running the history loader")
