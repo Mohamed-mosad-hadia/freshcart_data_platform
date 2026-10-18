@@ -40,10 +40,6 @@ def currencies_table():
             ALTER TABLE bronze_fx_api.currencies
             ADD COLUMN IF NOT EXISTS raw_payload String
         """)
-        client.execute("""
-            ALTER TABLE bronze_fx_api.currencies
-            ADD COLUMN IF NOT EXISTS source String DEFAULT 'fx_api'
-        """)
         logger.info("Bronze currencies table is ready.")
     except Exception:
         logger.exception("Failed to create bronze_fx_api.currencies table")

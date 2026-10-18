@@ -7,6 +7,8 @@ create a file-ingestion ledger. Existing tables and rows are left in place.
 import hashlib
 import json
 import logging
+import sys
+from clickhouse_connect import get_client as Client
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +33,24 @@ LEDGER_COLUMNS = (
     ("batch_id", "UUID"),
     ("ingested_at", "DateTime64(3, 'Africa/Cairo')"),
 )
+
+
+def get_client():
+    """Create a ClickHouse client using clickhouse_connect."""
+    try:
+        client = Client(
+            host="localhost",
+            port=8123,
+            username="freshcart_user",
+            password="freshcart_ch_pass",
+            database="bronze_suppliers",
+            connect_timeout=10,
+            send_hangups=True,
+        )
+        return client
+    except Exception as e:
+        logging.error("ClickHouse client creation failed: %s", e)
+        sys.exit(1)
 
 
 def quote_identifier(name):
@@ -75,9 +95,9 @@ def _verify_columns(client, table, expected):
 
 def ensure_ledger(client):
     """Create the Bronze database and completed-file ledger if absent."""
-    client.execute(f"CREATE DATABASE IF NOT EXISTS {quote_identifier(BRONZE_DB)}")
+    client.execute(f"CREATE DATABASE IF NOT EXISTS {BRONZE_DB}")
     client.execute(f"""
-        CREATE TABLE IF NOT EXISTS {quote_identifier(BRONZE_DB)}.{quote_identifier(LEDGER_TABLE)}
+        CREATE TABLE IF NOT EXISTS {BRONZE_DB}.{LEDGER_TABLE}
         (
             source_file String,
             file_sha256 String,
@@ -95,7 +115,7 @@ def ensure_ledger(client):
 def ensure_data_table(client, header):
     """Create or verify the table matching this file's exact ordered header."""
     table, schema_hash = schema_identity(header)
-    columns = [f"{quote_identifier(name)} String" for name in header]
+    columns = [f"`{name}` String" for name in header]
     columns.extend(
         [
             "batch_id UUID",
@@ -108,7 +128,7 @@ def ensure_data_table(client, header):
     )
     definition = ",\n            ".join(columns)
     client.execute(f"""
-        CREATE TABLE IF NOT EXISTS {quote_identifier(BRONZE_DB)}.{quote_identifier(table)}
+        CREATE TABLE IF NOT EXISTS {BRONZE_DB}.{table}
         (
             {definition}
         )

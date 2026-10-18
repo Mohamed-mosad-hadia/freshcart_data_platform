@@ -1,0 +1,1 @@
+"""Supplier ClickHouse DDL definitions."""

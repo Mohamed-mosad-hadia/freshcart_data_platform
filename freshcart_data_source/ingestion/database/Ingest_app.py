@@ -46,11 +46,15 @@ _env_file = Path(__file__).resolve().parents[2] / ".env"
 load_dotenv(_env_file)
 
 # ------------------------------------------------------------------ settings
-# PostgreSQL source
-PG_HOST, PG_PORT, PG_DB = "localhost", 5433, "freshcart_source"
+# PostgreSQL source (use service names in Docker, localhost for local dev)
+PG_HOST = os.getenv("PG_HOST", "localhost")
+PG_PORT = int(os.getenv("PG_PORT", "5433"))
+PG_DB = os.getenv("PG_DB", "freshcart_source")
 PG_SCHEMA = "app"                            # schema of the source tables
 # ClickHouse target
-CH_HOST, CH_PORT, CH_USER = "localhost", 8123, "freshcart_user"
+CH_HOST = os.getenv("CH_HOST", "localhost")
+CH_PORT = int(os.getenv("CH_PORT", "8123"))
+CH_USER = os.getenv("CH_USER", "freshcart_user")
 DB = "freshcart_dwh"                         # houses the ETL log
 BRONZE_DB = "bronze_app"                     # dedicated database = bronze schema
 SRC_SYSTEM = PG_DB                           # label written to _source_system
@@ -334,6 +338,30 @@ def incremental(t, day=None, lookback=LOOKBACK_DAYS):
     while d < today:                            # only completed Cairo days
         load_day(t, d)
         d += dt.timedelta(days=1)
+
+
+def run_database_ingestion(mode: str = "incremental", table: str = None, day: str = None, lookback: int = LOOKBACK_DAYS, force: bool = False):
+    """
+    Run database ingestion programmatically (for Airflow).
+
+    Args:
+        mode: "init", "full", or "incremental" (default: "incremental")
+        table: Specific table to ingest, or None for all tables
+        day: Specific day to load (ISO format string), or None for automatic
+        lookback: Number of days to look back for incremental loads (default: LOOKBACK_DAYS)
+        force: Force full load even if already done (default: False)
+    """
+    if mode == "init":
+        init()
+    else:
+        tables = [table] if table else SOURCE_TABLES
+        day_obj = dt.date.fromisoformat(day) if day else None
+
+        for tbl_name in tables:
+            if mode == "full":
+                full_load(tbl_name, force)
+            else:
+                incremental(tbl_name, day_obj, lookback)
 
 
 if __name__ == "__main__":

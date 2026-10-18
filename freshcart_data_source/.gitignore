@@ -24,3 +24,4 @@ dbt/target/
 dbt/logs/
 
 .idea/
+.logs/

@@ -11,7 +11,9 @@ currencies, daily rates, and rate history into ClickHouse.
 import argparse
 import logging
 import sys
+from datetime import datetime
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 from dotenv import load_dotenv
 
@@ -42,8 +44,16 @@ def initialize_tables():
         create_table()
 
 
-def run_ingestion(requested_date="2023-01-01", history_start=None, history_end=None):
-    """Run the full FX API ingestion workflow in dependency order."""
+def run_ingestion(requested_date=None, history_start=None, history_end=None):
+    """Run the full FX API ingestion workflow in dependency order.
+
+    ``requested_date`` defaults to today's date in Cairo (the rates endpoint
+    is only valid for completed business days, so the caller can override it
+    with an explicit ISO date when backfilling).
+    """
+    if requested_date is None:
+        requested_date = datetime.now(ZoneInfo("Africa/Cairo")).strftime("%Y-%m-%d")
+
     logger.info("Initializing FX API Bronze tables")
     initialize_tables()
 
@@ -68,8 +78,8 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description="Run the FX API ingestion pipeline")
     parser.add_argument(
         "--rates-date",
-        default="2023-01-01",
-        help="Date to request from the rates endpoint (YYYY-MM-DD)",
+        default=None,
+        help="Date to request from the rates endpoint (YYYY-MM-DD); defaults to today in Cairo",
     )
     parser.add_argument(
         "--history-start",

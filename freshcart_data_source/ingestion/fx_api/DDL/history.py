@@ -33,7 +33,7 @@ def history_table():
         """)
 
         # CREATE TABLE IF NOT EXISTS does not update an existing schema.
-        # Keep historical parsed rows while making future inserts raw-only.
+        # Keep historical parsed rows while making future rows raw-only.
         client.execute("""
             ALTER TABLE bronze_fx_api.history
             ADD COLUMN IF NOT EXISTS batch_id UUID
