@@ -108,4 +108,6 @@ with DAG(
         task_id="Supplier_Ingestion_dag",
         python_callable=run_supplier_ingestion,
     )
-    Database_Ingestion_dag >> Fx_api_ingestion_dag >> Supplier_Ingestion_dag
+    Database_Ingestion_dag 
+    Fx_api_ingestion_dag 
+    Supplier_Ingestion_dag
