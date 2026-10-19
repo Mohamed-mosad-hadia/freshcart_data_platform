@@ -3,7 +3,8 @@ Execution Flow: Read the API key and stored rates, start at 2023-01-01 or rechec
     seven days, fetch 30-day windows, validate dates, and insert unseen payloads.
 File Path: freshcart_data_source/ingestion/fx_api/Load/history.py
 Dependencies and Inputs: requests, urllib3 Retry, connection_clickhouse;
-    FX_API_KEY, optional start_date/end_date, and local history API.
+    env vars FX_API_KEY (required) and FX_API_URL (default http://fx-api:8000),
+    optional start_date/end_date.
 Outputs: Raw response rows in bronze_fx_api.history.
 """
 
@@ -38,7 +39,8 @@ def _rates_in_payload(raw_payload, start=None, end=None):
 
 
 def insert_bronze_history(start_date=None, end_date=None):
-    url = "http://localhost:8000/v1/rates/history"
+    base_url = os.getenv("FX_API_URL", "http://fx-api:8000").rstrip("/")
+    url = f"{base_url}/v1/rates/history"
     api_key = os.getenv("FX_API_KEY")
     if not api_key:
         raise ValueError("Set FX_API_KEY before running the history loader")

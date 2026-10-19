@@ -3,11 +3,12 @@ Execution Flow: When called, generate a batch ID, request /health with retries,
     then insert the response text into ClickHouse.
 File Path: freshcart_data_source/ingestion/fx_api/Load/health_check.py
 Dependencies and Inputs: requests, urllib3 Retry, connection_clickhouse;
-    local API at /health and its X-API-Key header.
+    env vars FX_API_URL (default http://fx-api:8000) and FX_API_KEY (required).
 Outputs: A row in bronze_fx_api.health_check.
 """
 
 import logging
+import os
 from uuid import uuid4
 
 import requests
@@ -20,8 +21,9 @@ logger = logging.getLogger(__name__)
 
 
 def insert_bronze_health_check():
-    url = "http://localhost:8000/health"
-    headers = {"X-API-Key": "freshcart-fx-key"}
+    base_url = os.getenv("FX_API_URL", "http://fx-api:8000").rstrip("/")
+    url = f"{base_url}/health"
+    headers = {"X-API-Key": os.environ["FX_API_KEY"]}
     batch_id = uuid4()
 
     try:
@@ -41,8 +43,11 @@ def insert_bronze_health_check():
         logger.exception("API request failed")
         raise
 
+    client = connection_clickhouse()
+    if client is None:
+        raise ConnectionError("Could not connect to ClickHouse")
+
     try:
-        client = connection_clickhouse()
         client.execute(
             "INSERT INTO bronze_fx_api.health_check (batch_id, raw_payload) VALUES",
             [(batch_id, raw_payload)],
@@ -51,3 +56,9 @@ def insert_bronze_health_check():
     except Exception:
         logger.exception("Failed to insert health check data into bronze_fx_api.health_check")
         raise
+    finally:
+        client.disconnect()
+
+
+if __name__ == "__main__":
+    insert_bronze_health_check()

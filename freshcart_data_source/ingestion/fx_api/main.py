@@ -10,8 +10,7 @@ currencies, daily rates, and rate history into ClickHouse.
 
 import argparse
 import logging
-import sys
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -27,10 +26,18 @@ from ingestion.fx_api.Load.history import insert_bronze_history
 from ingestion.fx_api.Load.rates import insert_bronze_rates
 
 # Load the project-level environment file regardless of the current directory.
+# override=False (the default) keeps variables already set by Docker/Airflow.
 _env_file = Path(__file__).resolve().parents[2] / ".env"
 load_dotenv(_env_file)
 
 logger = logging.getLogger(__name__)
+
+CAIRO_TZ = ZoneInfo("Africa/Cairo")
+
+
+def yesterday_in_cairo():
+    """Return yesterday's date in Cairo as an ISO string (YYYY-MM-DD)."""
+    return (datetime.now(CAIRO_TZ).date() - timedelta(days=1)).isoformat()
 
 
 def initialize_tables():
@@ -47,12 +54,12 @@ def initialize_tables():
 def run_ingestion(requested_date=None, history_start=None, history_end=None):
     """Run the full FX API ingestion workflow in dependency order.
 
-    ``requested_date`` defaults to today's date in Cairo (the rates endpoint
-    is only valid for completed business days, so the caller can override it
-    with an explicit ISO date when backfilling).
+    ``requested_date`` defaults to yesterday in Cairo (the rates endpoint is
+    only valid for completed days, so today's date returns 404). Callers can
+    override it with an explicit ISO date when backfilling.
     """
     if requested_date is None:
-        requested_date = datetime.now(ZoneInfo("Africa/Cairo")).strftime("%Y-%m-%d")
+        requested_date = yesterday_in_cairo()
 
     logger.info("Initializing FX API Bronze tables")
     initialize_tables()
@@ -61,11 +68,7 @@ def run_ingestion(requested_date=None, history_start=None, history_end=None):
         ("health check", insert_bronze_health_check, ()),
         ("currencies", insert_bronze_currencies, ()),
         ("rates", insert_bronze_rates, (requested_date,)),
-        (
-            "history",
-            insert_bronze_history,
-            (history_start, history_end),
-        ),
+        ("history", insert_bronze_history, (history_start, history_end)),
     )
     for name, loader, args in loaders:
         logger.info("Starting FX API %s load", name)
@@ -79,7 +82,7 @@ def main(argv=None):
     parser.add_argument(
         "--rates-date",
         default=None,
-        help="Date to request from the rates endpoint (YYYY-MM-DD); defaults to today in Cairo",
+        help="Date to request from the rates endpoint (YYYY-MM-DD); defaults to yesterday in Cairo",
     )
     parser.add_argument(
         "--history-start",

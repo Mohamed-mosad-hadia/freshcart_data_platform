@@ -2,10 +2,12 @@ import json
 import logging
 import os
 import urllib.request
+from pathlib import Path
 from datetime import datetime, timedelta
 from airflow import DAG
 from airflow.models import Variable
-from airflow.operators.python import PythonOperator
+from airflow.providers.standard.operators.python import PythonOperator
+from airflow.providers.standard.sensors.python import PythonSensor
 from airflow.utils.email import send_email
 
 # Import the ingestion functions
@@ -15,6 +17,8 @@ from ingestion.suppliers import run_ingestion as run_supplier_ingestion
 
 logger = logging.getLogger(__name__)
 
+SUPPLIER_DIR = Path(os.getenv("SUPPLIER_DIR", "/opt/airflow/project/source_files/suppliers"))
+SETTLE_SECONDS = 30  # ignore files modified in the last 30s (may still be written)
 
 def task_failure_alert(context):
     """Callback executed when a task fails permanently (after retries)."""
@@ -65,10 +69,23 @@ def task_failure_alert(context):
         except Exception as exc:
             logger.warning("Could not dispatch email alert via Gmail: %s", exc)
 
+def supplier_files_ready():
+    """Return True once at least one settled supplier CSV exists."""
+    if not SUPPLIER_DIR.is_dir():
+        logger.info("Supplier directory not found yet: %s", SUPPLIER_DIR)
+        return False
+
+    now = datetime.now().timestamp()    
+    ready = [
+        p for p in SUPPLIER_DIR.rglob("*.csv")
+        if p.is_file() and now - p.stat().st_mtime > SETTLE_SECONDS
+    ]
+    logger.info("Found %d settled supplier CSV file(s) under %s", len(ready), SUPPLIER_DIR)
+    return bool(ready)
 
 default_args = {
     "owner": "Ahmed Nabil, Mohamed Mosaad",
-    "depends_on_past": False,               # Backfill runs in chronological order
+    "depends_on_past": True,               # Backfill runs in chronological order
 
     "start_date": datetime(2026, 10, 13),  # Course start date for backfilling
     "end_date": datetime(2026, 10, 26),    # Course end date
@@ -104,10 +121,21 @@ with DAG(
         python_callable=run_ingestion,
     )
 
+    Wait_for_supplier_files = PythonSensor(
+        task_id="Wait_for_supplier_files",
+        python_callable=supplier_files_ready,
+        depends_on_past=False,
+        mode="reschedule",                    # frees the worker slot between checks
+        poke_interval=60,                     # check every minute
+        timeout=60 * 60,                      # give up after 1 hour
+        retries=0,                            # the timeout already covers waiting
+    )
+
     Supplier_Ingestion_dag = PythonOperator(
         task_id="Supplier_Ingestion_dag",
         python_callable=run_supplier_ingestion,
     )
-    Database_Ingestion_dag 
-    Fx_api_ingestion_dag 
-    Supplier_Ingestion_dag
+
+    # Database and FX run independently; suppliers wait for their files.
+    Wait_for_supplier_files >> Supplier_Ingestion_dag
+    [Database_Ingestion_dag, Fx_api_ingestion_dag]

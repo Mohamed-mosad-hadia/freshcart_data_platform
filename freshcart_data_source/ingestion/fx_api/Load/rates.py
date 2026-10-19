@@ -3,11 +3,13 @@ Execution Flow: Parse the requested date, generate a batch ID, request /v1/rates
     with retries, then insert the date and response text into ClickHouse.
 File Path: freshcart_data_source/ingestion/fx_api/Load/rates.py
 Dependencies and Inputs: requests, urllib3 Retry, connection_clickhouse;
-    local API, X-API-Key header, and requested_date (default 2023-01-01).
+    env vars FX_API_URL (default http://fx-api:8000) and FX_API_KEY (required),
+    and requested_date (default 2023-01-01).
 Outputs: A row in bronze_fx_api.rates.
 """
 
 import logging
+import os
 from datetime import date
 from uuid import uuid4
 
@@ -21,8 +23,9 @@ logger = logging.getLogger(__name__)
 
 
 def insert_bronze_rates(requested_date="2023-01-01"):
-    url = "http://localhost:8000/v1/rates"
-    headers = {"X-API-Key": "freshcart-fx-key"}
+    base_url = os.getenv("FX_API_URL", "http://fx-api:8000").rstrip("/")
+    url = f"{base_url}/v1/rates"
+    headers = {"X-API-Key": os.environ["FX_API_KEY"]}
     if isinstance(requested_date, str):
         requested_date = date.fromisoformat(requested_date)
     batch_id = uuid4()
@@ -49,8 +52,11 @@ def insert_bronze_rates(requested_date="2023-01-01"):
         logger.exception("Rates API request failed")
         raise
 
+    client = connection_clickhouse()
+    if client is None:
+        raise ConnectionError("Could not connect to ClickHouse")
+
     try:
-        client = connection_clickhouse()
         client.execute(
             "INSERT INTO bronze_fx_api.rates (batch_id, requested_date, raw_payload) VALUES",
             [(batch_id, requested_date, raw_payload)],
@@ -59,6 +65,8 @@ def insert_bronze_rates(requested_date="2023-01-01"):
     except Exception:
         logger.exception("Failed to insert data into bronze_fx_api.rates")
         raise
+    finally:
+        client.disconnect()
 
 
 if __name__ == "__main__":

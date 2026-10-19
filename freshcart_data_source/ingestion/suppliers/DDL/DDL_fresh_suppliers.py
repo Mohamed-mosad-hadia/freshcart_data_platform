@@ -7,8 +7,8 @@ create a file-ingestion ledger. Existing tables and rows are left in place.
 import hashlib
 import json
 import logging
-import sys
-from clickhouse_connect import get_client as Client
+
+from ingestion.fx_api.connection_clickhouse import connection_clickhouse
 
 logger = logging.getLogger(__name__)
 
@@ -36,21 +36,11 @@ LEDGER_COLUMNS = (
 
 
 def get_client():
-    """Create a ClickHouse client using clickhouse_connect."""
-    try:
-        client = Client(
-            host="localhost",
-            port=8123,
-            username="freshcart_user",
-            password="freshcart_ch_pass",
-            database="bronze_suppliers",
-            connect_timeout=10,
-            send_hangups=True,
-        )
-        return client
-    except Exception as e:
-        logging.error("ClickHouse client creation failed: %s", e)
-        sys.exit(1)
+    """Return the shared ClickHouse client (wrapped clickhouse-connect)."""
+    client = connection_clickhouse()
+    if client is None:
+        raise ConnectionError("Could not connect to ClickHouse")
+    return client
 
 
 def quote_identifier(name):

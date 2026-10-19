@@ -7,72 +7,15 @@ reuse the completed-file ledger without changing existing tables or rows.
 import hashlib
 import json
 import logging
-import sys
-from clickhouse_connect import get_client as Client
+
+from ingestion.fx_api.connection_clickhouse import connection_clickhouse
 
 logger = logging.getLogger(__name__)
 
-TABLE_PREFIX = "general_stock"
 BRONZE_DB = "bronze_suppliers"
-
-
-
-def get_client():
-    """Create a ClickHouse client using clickhouse_connect."""
-    try:
-        client = Client(
-            host="localhost",
-            port=8123,
-            username="freshcart_user",
-            password="freshcart_ch_pass",
-            database="bronze_suppliers",
-            connect_timeout=10,
-            send_hangups=True,
-        )
-        return client
-    except Exception as e:
-        logging.error("ClickHouse client creation failed: %s", e)
-        sys.exit(1)
-
-
-def schema_identity(header):
-    """Return a stable table name and full hash for an ordered CSV header."""
-    encoded = json.dumps(header, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
-    digest = hashlib.sha256(encoded).hexdigest()
-    return f"{TABLE_PREFIX}_{digest[:12]}", digest
-
-
-def ensure_data_table(client, header):
-    """Create or verify the table matching this file's exact ordered header."""
-    table, schema_hash = schema_identity(header)
-    columns = [f"`{name}` String" for name in header]
-    columns.extend(
-        [
-            "batch_id UUID",
-            "source_file String",
-            "file_sha256 String",
-            "source_row_number UInt64",
-            "ingested_at DateTime64(3, 'Africa/Cairo') DEFAULT now64(3)",
-            f"source String DEFAULT '{SOURCE}'",
-        ]
-    )
-    definition = ",\n            ".join(columns)
-    client.execute(f"""
-        CREATE TABLE IF NOT EXISTS {table}
-        (
-            {definition}
-        )
-        ENGINE = MergeTree()
-        ORDER BY (source_file, file_sha256, source_row_number)
-    """)
-    logger.debug("Bronze table ready: %s.%s", "bronze_suppliers", table)
-    return table, schema_hash
-
-# ---------------------------------------------------------------------------
-# Ledger and schema utilities (mirroring DDL_fresh_suppliers)
-
-SOURCE = "suppliers_general"
+TABLE_PREFIX = "general_stock"
 LEDGER_TABLE = "ingested_files"
+SOURCE = "suppliers_general"
 
 ROW_METADATA = (
     ("batch_id", "UUID"),
@@ -91,6 +34,14 @@ LEDGER_COLUMNS = (
     ("batch_id", "UUID"),
     ("ingested_at", "DateTime64(3, 'Africa/Cairo')"),
 )
+
+
+def get_client():
+    """Return the shared ClickHouse client (wrapped clickhouse-connect)."""
+    client = connection_clickhouse()
+    if client is None:
+        raise ConnectionError("Could not connect to ClickHouse")
+    return client
 
 
 def quote_identifier(name: str) -> str:
@@ -112,6 +63,27 @@ def validate_header(header):
             raise ValueError(f"CSV column conflicts with ingestion metadata: {name!r}")
 
 
+def schema_identity(header):
+    """Return a stable table name and full hash for an ordered CSV header."""
+    validate_header(header)
+    encoded = json.dumps(header, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+    digest = hashlib.sha256(encoded).hexdigest()
+    return f"{TABLE_PREFIX}_{digest[:12]}", digest
+
+
+def _verify_columns(client, table, expected):
+    actual = client.execute(
+        """SELECT name, type FROM system.columns
+           WHERE database = %(database)s AND table = %(table)s
+           ORDER BY position""",
+        {"database": BRONZE_DB, "table": table},
+    )
+    if [tuple(r) for r in actual] != list(expected):
+        raise ValueError(
+            f"Existing {BRONZE_DB}.{table} schema differs from expected: {actual!r}"
+        )
+
+
 def ensure_ledger(client):
     """Create the Bronze database and completed-file ledger if absent."""
     client.execute(f"CREATE DATABASE IF NOT EXISTS {BRONZE_DB}")
@@ -128,11 +100,32 @@ def ensure_ledger(client):
         ENGINE = MergeTree()
         ORDER BY (source_file, file_sha256)
     """)
-    # Verify columns match expected schema
-    from clickhouse_connect import get_client as Client  # noqa: F401 (import for side‑effect)
-    actual = client.execute(
-        f"SELECT name FROM system.columns WHERE database='{BRONZE_DB}' AND table='{LEDGER_TABLE}'"
+    _verify_columns(client, LEDGER_TABLE, LEDGER_COLUMNS)
+
+
+def ensure_data_table(client, header):
+    """Create or verify the table matching this file's exact ordered header."""
+    table, schema_hash = schema_identity(header)
+    columns = [f"{quote_identifier(name)} String" for name in header]
+    columns.extend(
+        [
+            "batch_id UUID",
+            "source_file String",
+            "file_sha256 String",
+            "source_row_number UInt64",
+            "ingested_at DateTime64(3, 'Africa/Cairo') DEFAULT now64(3)",
+            f"source String DEFAULT '{SOURCE}'",
+        ]
     )
-    # Simple sanity check – we rely on ClickHouse to enforce column types
-    # No further action needed here
-    return None
+    definition = ",\n            ".join(columns)
+    client.execute(f"""
+        CREATE TABLE IF NOT EXISTS {BRONZE_DB}.{table}
+        (
+            {definition}
+        )
+        ENGINE = MergeTree()
+        ORDER BY (source_file, file_sha256, source_row_number)
+    """)
+    _verify_columns(client, table, [(name, "String") for name in header] + list(ROW_METADATA))
+    logger.debug("Bronze table ready: %s.%s", BRONZE_DB, table)
+    return table, schema_hash

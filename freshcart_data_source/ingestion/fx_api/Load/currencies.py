@@ -6,13 +6,14 @@ Execution Flow:
     insert the response text into ClickHouse.
 File Path:
     freshcart_data_source/ingestion/fx_api/Load/currencies.py
-Dependencies and Inputs: 
+Dependencies and Inputs:
     requests, urllib3 Retry, connection_clickhouse;
-    local API at /v1/currencies and its X-API-Key header.
+    env vars FX_API_URL (default http://fx-api:8000) and FX_API_KEY (required).
 Outputs: A row in bronze_fx_api.currencies.
 """
 
 import logging
+import os
 from uuid import uuid4
 
 import requests
@@ -25,8 +26,9 @@ logger = logging.getLogger(__name__)
 
 
 def insert_bronze_currencies():
-    url = "http://localhost:8000/v1/currencies"
-    headers = {"X-API-Key": "freshcart-fx-key"}
+    base_url = os.getenv("FX_API_URL", "http://fx-api:8000").rstrip("/")
+    url = f"{base_url}/v1/currencies"
+    headers = {"X-API-Key": os.environ["FX_API_KEY"]}
     batch_id = uuid4()
 
     try:
@@ -46,8 +48,11 @@ def insert_bronze_currencies():
         logger.exception("Currencies API request failed")
         raise
 
+    client = connection_clickhouse()
+    if client is None:
+        raise ConnectionError("Could not connect to ClickHouse")
+
     try:
-        client = connection_clickhouse()
         client.execute(
             "INSERT INTO bronze_fx_api.currencies (batch_id, raw_payload) VALUES",
             [(batch_id, raw_payload)],
@@ -56,6 +61,8 @@ def insert_bronze_currencies():
     except Exception:
         logger.exception("Failed to insert data into bronze_fx_api.currencies")
         raise
+    finally:
+        client.disconnect()
 
 
 if __name__ == "__main__":
