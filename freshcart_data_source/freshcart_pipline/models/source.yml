@@ -1,0 +1,193 @@
+version: 2
+
+sources:
+  # ---------- Application database ----------
+  - name: bronze_app
+    schema: bronze_app
+    tables:
+      - name: products
+        columns:
+          - name: product_id
+            data_tests: [unique, not_null]
+          - name: product_name
+          - name: category
+          - name: unit_price_usd
+          - name: is_active
+          - name: created_at
+          - name: updated_at
+
+      - name: product_prices
+        columns:
+          - name: product_id
+            data_tests: [not_null]
+          - name: unit_price_usd
+          - name: valid_from
+          - name: created_at
+          - name: updated_at
+
+      - name: stores
+        columns:
+          - name: store_id
+            data_tests: [unique, not_null]
+          - name: store_name
+          - name: city
+          - name: country
+          - name: currency
+          - name: opened_at
+          - name: created_at
+          - name: updated_at
+
+      - name: customers
+        columns:
+          - name: customer_id
+            data_tests: [unique, not_null]
+          - name: first_name
+          - name: last_name
+          - name: email
+          - name: phone
+          - name: city
+          - name: signup_date
+          - name: created_at
+          - name: updated_at
+
+      - name: orders
+        columns:
+          - name: order_id
+            data_tests: [unique, not_null]
+          - name: customer_id
+            data_tests: [not_null]
+          - name: store_id
+          - name: order_status
+          - name: placed_at
+          - name: delivered_at
+          - name: created_at
+          - name: updated_at
+          - name: promo_code
+
+      - name: order_items
+        columns:
+          - name: order_item_id
+            data_tests: [unique, not_null]
+          - name: order_id
+            data_tests: [not_null]
+          - name: product_id
+          - name: quantity
+          - name: unit_price
+          - name: line_amount
+          - name: created_at
+          - name: updated_at
+
+      - name: payments
+        columns:
+          - name: payment_id
+            data_tests: [unique, not_null]
+          - name: order_id
+            data_tests: [not_null]
+          - name: payment_method
+          - name: payment_status
+          - name: amount
+          - name: paid_at
+          - name: created_at
+          - name: updated_at
+
+  # ---------- Exchange-rate API (raw JSON payloads) ----------
+  - name: bronze_fx_api
+    schema: bronze_fx_api             # assumed name, verify with SHOW DATABASES
+    tables:
+      - name: rates
+        columns:
+          - name: batch_id
+            data_tests: [not_null]
+          - name: requested_date
+          - name: raw_payload
+          - name: fetched_at
+          - name: source
+
+      - name: currencies
+        columns:
+          - name: batch_id
+            data_tests: [not_null]
+          - name: raw_payload
+          - name: fetched_at
+          - name: source
+
+      - name: health_check
+        columns:
+          - name: batch_id
+          - name: raw_payload
+          - name: fetched_at
+          - name: source
+
+      - name: history
+        columns:
+          - name: batch_id
+            data_tests: [not_null]
+          - name: request_start_date
+          - name: request_end_date
+          - name: raw_payload
+          - name: fetched_at
+          - name: source
+
+  # ---------- Supplier stock files ----------
+  - name: bronze_suppliers
+    schema: bronze_suppliers          # assumed name, verify with SHOW DATABASES
+    tables:
+      - name: ingested_files
+        columns:
+          - name: source_file
+          - name: file_sha256
+          - name: schema_hash
+          - name: row_count
+          - name: batch_id
+          - name: ingested_at
+
+      - name: fresh_stock
+        identifier: fresh_stock_ce167a53a5e0
+        columns:
+          - name: supplier
+          - name: product_id
+          - name: store_id
+          - name: stock_date
+          - name: quantity_on_hand
+          - name: reorder_level
+          - name: batch_id
+          - name: source_file
+          - name: file_sha256
+          - name: source_row_number
+          - name: ingested_at
+          - name: source
+
+      # Variant 1: columns Qty / MinQty (no UnitCost)
+      - name: general_stock_qty
+        identifier: general_stock_7e84d7c978e4
+        columns:
+          - name: Supplier
+          - name: Product
+          - name: Store
+          - name: Date
+          - name: Qty
+          - name: MinQty
+          - name: batch_id
+          - name: source_file
+          - name: file_sha256
+          - name: source_row_number
+          - name: ingested_at
+          - name: source
+
+      # Variant 2: columns QtyOnHand / MinQty / UnitCost
+      - name: general_stock_qtyonhand
+        identifier: general_stock_39c8d28c0bd9
+        columns:
+          - name: Supplier
+          - name: Product
+          - name: Store
+          - name: Date
+          - name: QtyOnHand
+          - name: MinQty
+          - name: UnitCost
+          - name: batch_id
+          - name: source_file
+          - name: file_sha256
+          - name: source_row_number
+          - name: ingested_at
+          - name: source

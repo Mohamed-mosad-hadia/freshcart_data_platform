@@ -1,0 +1,24 @@
+# Project names should contain only lowercase characters and underscores.
+name: 'freshcart_pipeline'
+version: '1.0.0'
+
+# Must match the top-level key in ~/.dbt/profiles.yml
+profile: 'freshcart_pipeline'
+
+model-paths: ["models"]
+analysis-paths: ["analyses"]
+test-paths: ["tests"]
+seed-paths: ["seeds"]
+macro-paths: ["macros"]
+snapshot-paths: ["snapshots"]
+
+clean-targets:
+  - "target"
+  - "dbt_packages"
+
+models:
+  freshcart_pipeline:
+      silver:
+        +schema: silver
+      gold:
+        +schema: gold
