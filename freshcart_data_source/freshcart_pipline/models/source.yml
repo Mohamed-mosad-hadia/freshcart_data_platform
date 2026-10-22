@@ -6,9 +6,10 @@ sources:
     schema: bronze_app
     tables:
       - name: products
+        description: "Raw products. May contain multiple versions per product_id."
         columns:
           - name: product_id
-            data_tests: [unique, not_null]
+            data_tests: [not_null] # unique removed: duplicates exist in bronze
           - name: product_name
           - name: category
           - name: unit_price_usd
@@ -19,7 +20,12 @@ sources:
       - name: product_prices
         columns:
           - name: product_id
-            data_tests: [not_null]
+            data_tests:
+              - not_null
+              - relationships:
+                  arguments:
+                    to: source('bronze_app', 'products')
+                    field: product_id
           - name: unit_price_usd
           - name: valid_from
           - name: created_at
@@ -38,9 +44,10 @@ sources:
           - name: updated_at
 
       - name: customers
+        description: "Raw customers. May contain multiple versions per customer_id."
         columns:
           - name: customer_id
-            data_tests: [unique, not_null]
+            data_tests: [not_null] # unique removed: duplicates exist in bronze
           - name: first_name
           - name: last_name
           - name: email
@@ -51,12 +58,23 @@ sources:
           - name: updated_at
 
       - name: orders
+        description: "Raw orders. May contain multiple versions per order_id."
         columns:
           - name: order_id
-            data_tests: [unique, not_null]
+            data_tests: [not_null] # unique removed: duplicates exist in bronze
           - name: customer_id
-            data_tests: [not_null]
+            data_tests:
+              - not_null
+              - relationships:
+                  arguments:
+                    to: source('bronze_app', 'customers')
+                    field: customer_id
           - name: store_id
+            data_tests:
+              - relationships:
+                  arguments:
+                    to: source('bronze_app', 'stores')
+                    field: store_id
           - name: order_status
           - name: placed_at
           - name: delivered_at
@@ -69,8 +87,20 @@ sources:
           - name: order_item_id
             data_tests: [unique, not_null]
           - name: order_id
-            data_tests: [not_null]
+            data_tests:
+              - not_null
+              - relationships:
+                  arguments:
+                    to: source('bronze_app', 'orders')
+                    field: order_id
+                  config:
+                    severity: warn # known gap: ~179 order_ids missing from orders (revisit later)
           - name: product_id
+            data_tests:
+              - relationships:
+                  arguments:
+                    to: source('bronze_app', 'products')
+                    field: product_id
           - name: quantity
           - name: unit_price
           - name: line_amount
@@ -82,7 +112,14 @@ sources:
           - name: payment_id
             data_tests: [unique, not_null]
           - name: order_id
-            data_tests: [not_null]
+            data_tests:
+              - not_null
+              - relationships:
+                  arguments:
+                    to: source('bronze_app', 'orders')
+                    field: order_id
+                  config:
+                    severity: warn # same missing orders as order_items (revisit later)
           - name: payment_method
           - name: payment_status
           - name: amount
@@ -92,7 +129,7 @@ sources:
 
   # ---------- Exchange-rate API (raw JSON payloads) ----------
   - name: bronze_fx_api
-    schema: bronze_fx_api             # assumed name, verify with SHOW DATABASES
+    schema: bronze_fx_api
     tables:
       - name: rates
         columns:
@@ -130,7 +167,7 @@ sources:
 
   # ---------- Supplier stock files ----------
   - name: bronze_suppliers
-    schema: bronze_suppliers          # assumed name, verify with SHOW DATABASES
+    schema: bronze_suppliers # verify with SHOW DATABASES (not tested yet)
     tables:
       - name: ingested_files
         columns:
