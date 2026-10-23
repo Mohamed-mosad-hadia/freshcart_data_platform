@@ -25,3 +25,13 @@ dbt/logs/
 
 .idea/
 .logs/
+# Altimate Datamates skill files (auto-generated)
+.github/instructions/datamate/
+.github/instructions/general-awareness.instructions.md
+.github/instructions/.managed-skills.json
+.claude/
+.claude/skills/
+.claude/skills/altimate-datamate.md
+.claude/skills/altimate-datamate/
+.agent/
+.vscode/
