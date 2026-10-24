@@ -10,3 +10,151 @@ models:
         data_tests: [unique, not_null]
       - name: signup_date
         data_tests: [not_null]
+
+  - name: silver_orders
+    description: "One row per order (latest version). QA orders dropped, duplicate customers remapped."
+    columns:
+      - name: order_id
+        data_tests: [unique, not_null]
+      - name: customer_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('silver_customers')
+                field: customer_id
+      - name: store_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: source('bronze_app', 'stores')
+                field: store_id
+      - name: order_status
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ["delivered", "cancelled"]
+      - name: placed_at
+        data_tests: [not_null]
+
+  - name: silver_stores
+    description: "One row per store, cleaned from bronze_app.stores"
+    columns:
+      - name: store_id
+        data_tests: [unique, not_null]
+      - name: store_name
+        data_tests: [not_null]
+      - name: country
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ["EG", "SA", "AE"]
+      - name: currency
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ["EGP", "SAR", "AED"]
+
+  - name: silver_order_items
+    description: "One row per order line, local currency, QA items dropped, orphans flagged"
+    columns:
+      - name: order_item_id
+        data_tests: [unique, not_null]
+      - name: order_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('silver_orders')
+                field: order_id
+              config:
+                severity: warn
+      - name: product_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('silver_products')
+                field: product_id
+
+  - name: silver_products
+    description: "One row per product (latest version = current catalogue price), from bronze_app.products"
+    columns:
+      - name: product_id
+        data_tests: [unique, not_null]
+      - name: product_name
+        data_tests: [not_null]
+      - name: size_label
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ["500g", "1kg", "1L", "6-pack"]
+              config:
+                severity: warn
+      - name: category
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values:
+                  [
+                    "Bakery",
+                    "Beverages",
+                    "Dairy",
+                    "Frozen",
+                    "Fruits & Vegetables",
+                    "Household",
+                    "Meat & Fish",
+                    "Pantry",
+                    "Personal Care",
+                    "Snacks",
+                  ]
+      - name: unit_price_usd
+        data_tests: [not_null]
+      - name: is_active
+        data_tests: [not_null]
+
+  - name: silver_product_prices
+    description: "Product price history (SCD type 2): one row per product and valid_from, with valid_to and is_current. Timestamps are UTC."
+    columns:
+      - name: product_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('silver_products')
+                field: product_id
+      - name: unit_price_usd
+        data_tests: [not_null]
+      - name: price_version
+        data_tests: [not_null]
+      - name: valid_from
+        data_tests: [not_null]
+      - name: is_current
+        data_tests: [not_null]
+
+  - name: silver_payments
+    description: "One row per payment, duplicates removed, refunds signed negative"
+    columns:
+      - name: payment_id
+        data_tests: [unique, not_null]
+      - name: order_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('silver_orders')
+                field: order_id
+              config:
+                severity: warn
+      - name: payment_status
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ["paid", "refunded"]
+      - name: payment_method
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ["card", "cash", "wallet"]
