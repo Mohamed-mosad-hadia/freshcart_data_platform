@@ -1,0 +1,58 @@
+version: 2
+
+models:
+  - name: silver_supplier_stock
+    description: >
+      End-of-day stock (units on the shelf at 22:00) per supplier, product, store and day,
+      combining the FRESH file and both GENERAL file layouts (Qty until 2026-10-16,
+      QtyOnHand + UnitCost from 2026-10-17). GENERAL 'N/A' quantities become NULL
+      (is_qty_missing); they are not stockouts.
+    columns:
+      - name: supplier
+        description: FRESH (fruits & vegetables, dairy, bakery, meat & fish) or GENERAL (everything else).
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ["FRESH", "GENERAL"]
+      - name: product_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('silver_products')
+                field: product_id
+      - name: store_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('silver_stores')
+                field: store_id
+      - name: stock_date
+        description: Business day of the stock count (from the file).
+        data_tests: [not_null]
+      - name: quantity_on_hand
+        description: Units on the shelf; NULL when the supplier sent 'N/A' (not counted).
+      - name: reorder_level
+        description: Supplier minimum (reorder_level / MinQty).
+        data_tests: [not_null]
+      - name: unit_cost
+        description: GENERAL unit cost from 2026-10-17 (decimal comma converted); likely USD (about 69% of the catalogue USD price). NULL otherwise.
+      - name: is_qty_missing
+        description: Quantity was 'N/A' in the file.
+        data_tests: [not_null]
+      - name: is_stockout
+        description: Quantity on hand is 0 (missing quantities are not stockouts).
+        data_tests: [not_null]
+      - name: is_below_reorder
+        description: Quantity on hand below the reorder level.
+        data_tests: [not_null]
+      - name: is_before_store_opening
+        description: Stock reported for a day before the store opened (stores 5 and 6 in old files); exclude from stockout metrics.
+        data_tests: [not_null]
+      - name: source_layout
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ["fresh_v1", "general_v1_qty", "general_v2_qtyonhand"]

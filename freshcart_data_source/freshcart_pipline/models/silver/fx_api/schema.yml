@@ -1,0 +1,126 @@
+version: 2
+
+models:
+  - name: silver_rates
+    description: >
+      One quote-currency observation per stored rates API response. Repeated
+      responses are retained; is_latest_observation identifies one version
+      for each rate date, base currency, and quote currency.
+    columns:
+      - name: batch_id
+        description: Bronze response batch identifier.
+        data_tests: [not_null]
+      - name: requested_date
+        description: Date passed to the rates endpoint.
+        data_tests: [not_null]
+      - name: rate_date
+        description: Observation date reported inside the payload.
+      - name: base_currency
+        description: Normalized base currency code reported by the API.
+      - name: quote_currency
+        description: Normalized quote currency code; may be null for a malformed response.
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('silver_currencies')
+                field: currency_code
+              config:
+                severity: warn
+      - name: exchange_rate
+        description: Quote currency units per base currency unit, parsed from the API.
+      - name: published_at
+        description: API publication timestamp normalized to UTC when parseable.
+      - name: fetched_at
+        description: Bronze fetch timestamp in the Cairo timezone.
+        data_tests: [not_null]
+      - name: observation_version_count
+        description: Number of stored rows for the same observation key.
+      - name: has_unusable_exchange_rate
+        description: True when a rate is missing, nonnumeric, or not usable for conversion.
+        data_tests: [not_null]
+      - name: is_latest_observation
+        description: Latest stored version by fetch timestamp then batch ID.
+
+  - name: silver_currencies
+    description: >
+      One supported currency code per currencies API response. All snapshots
+      remain available; is_latest_snapshot selects the most recently fetched response.
+    columns:
+      - name: batch_id
+        description: Bronze response batch identifier.
+        data_tests: [not_null]
+      - name: base_currency
+        description: Normalized base currency code.
+      - name: currency_code
+        description: Normalized listed currency code; null for an empty or malformed list.
+      - name: pegged_rate
+        description: Numeric value in the API pegged map, when present.
+      - name: is_floating
+        description: Whether the code occurs in the response's floating list.
+      - name: fetched_at
+        description: Bronze fetch timestamp in the Cairo timezone.
+        data_tests: [not_null]
+      - name: is_latest_snapshot
+        description: Row belongs to the most recently fetched currency response.
+
+  - name: silver_history
+    description: >
+      One quote-currency observation per day inside each stored history response.
+      Overlapping response windows remain present with version counts and a latest marker.
+    columns:
+      - name: batch_id
+        description: Bronze loader batch identifier, which can span many response windows.
+        data_tests: [not_null]
+      - name: request_start_date
+        description: Requested start date stored in Bronze.
+        data_tests: [not_null]
+      - name: request_end_date
+        description: Requested end date stored in Bronze.
+        data_tests: [not_null]
+      - name: rate_date
+        description: Observation date inside the history day object.
+      - name: base_currency
+        description: Normalized base currency code.
+      - name: quote_currency
+        description: Normalized quote currency code.
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('silver_currencies')
+                field: currency_code
+              config:
+                severity: warn
+      - name: exchange_rate
+        description: Quote currency units per base currency unit.
+      - name: fetched_at
+        description: Bronze fetch timestamp in the Cairo timezone.
+        data_tests: [not_null]
+      - name: observation_version_count
+        description: Number of stored rows for the same date/base/quote observation.
+      - name: has_out_of_window_date
+        description: True when a parsed observation date is outside its stored request window.
+        data_tests: [not_null]
+      - name: has_unusable_exchange_rate
+        description: True when a rate is missing, nonnumeric, or not usable for conversion.
+        data_tests: [not_null]
+      - name: is_latest_observation
+        description: Latest stored version by fetch timestamp then batch ID.
+
+  - name: silver_health_check
+    description: >
+      One stored health response per batch, with parsed status and API timestamp.
+      A healthy response does not establish availability of the FX data endpoints.
+    columns:
+      - name: batch_id
+        description: Bronze response batch identifier.
+        data_tests: [unique, not_null]
+      - name: health_status
+        description: Lowercase status text reported by the health endpoint.
+      - name: api_checked_at
+        description: Parsed timestamp reported inside the health payload, normalized to UTC.
+      - name: fetched_at
+        description: Bronze fetch timestamp in the Cairo timezone.
+        data_tests: [not_null]
+      - name: is_healthy_response
+        description: True when the reported status is ok.
+        data_tests: [not_null]
