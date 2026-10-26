@@ -8,6 +8,7 @@ from airflow import DAG
 from airflow.models import Variable
 from airflow.providers.standard.operators.python import PythonOperator
 from airflow.providers.standard.sensors.python import PythonSensor
+from airflow.sdk import Asset
 from airflow.utils.email import send_email
 
 # Import the ingestion functions
@@ -19,6 +20,14 @@ logger = logging.getLogger(__name__)
 
 SUPPLIER_DIR = Path(os.getenv("SUPPLIER_DIR", "/opt/airflow/project/source_files/suppliers"))
 SETTLE_SECONDS = 30  # ignore files modified in the last 30s (may still be written)
+
+# Published when all three sources are loaded; dbt_dag is scheduled on it
+BRONZE_LOADED = Asset("freshcart_bronze_daily_load")
+
+
+def bronze_loaded(**context):
+    """Marker task: its success publishes BRONZE_LOADED and triggers dbt_dag."""
+    logger.info("Bronze load complete for %s; triggering dbt_dag", context.get("ds"))
 
 def task_failure_alert(context):
     """Callback executed when a task fails permanently (after retries)."""
@@ -135,6 +144,14 @@ with DAG(
         python_callable=run_supplier_ingestion,
     )
 
+    Bronze_loaded = PythonOperator(
+        task_id="Bronze_loaded",
+        python_callable=bronze_loaded,
+        outlets=[BRONZE_LOADED],              # success -> asset event -> dbt_dag runs
+        depends_on_past=False,
+    )
+
     # Database and FX run independently; suppliers wait for their files.
+    # dbt (dbt_dag) starts only when all three sources succeeded.
     Wait_for_supplier_files >> Supplier_Ingestion_dag
-    [Database_Ingestion_dag, Fx_api_ingestion_dag]
+    [Database_Ingestion_dag, Fx_api_ingestion_dag, Supplier_Ingestion_dag] >> Bronze_loaded

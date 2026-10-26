@@ -1,4 +1,6 @@
--- Completeness: every day between the first and last stock_date has both supplier files
+-- Completeness: every day has both supplier files.
+-- The latest day is not checked: GENERAL's file is often late (next morning), so the newest
+-- day may only have FRESH yet. A supplier missing for 2+ days still fails.
 with
     days as (
         select stock_date, uniqExact(supplier) as suppliers
@@ -8,7 +10,7 @@ with
     bounds as (
         select
             assumeNotNull(min(stock_date)) as first_day,
-            assumeNotNull(max(stock_date)) as last_day
+            assumeNotNull(max(stock_date)) - 1 as last_day
         from days
     ),
     calendar as (

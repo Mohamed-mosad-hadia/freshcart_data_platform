@@ -5,3 +5,9 @@ FROM ${AIRFLOW_BASE_IMAGE}
 COPY --chown=airflow:root requirements.txt /requirements.txt
 USER airflow
 RUN pip install --no-cache-dir -r /requirements.txt
+
+# dbt in an isolated virtualenv (same versions as the local .venv); Cosmos calls it via
+# dbt_executable_path, so dbt's dependencies never conflict with Airflow's
+RUN python -m venv /opt/airflow/dbt_venv && \
+    /opt/airflow/dbt_venv/bin/pip install --no-cache-dir \
+        dbt-core==1.12.6 dbt-clickhouse==1.10.3

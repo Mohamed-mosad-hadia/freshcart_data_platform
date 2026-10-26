@@ -34,7 +34,7 @@ models:
         data_tests:
           - accepted_values:
               arguments:
-                values: ["delivered", "cancelled"]
+                values: ["placed", "delivered", "cancelled"] # placed = open order, not delivered yet
       - name: placed_at
         data_tests: [not_null]
 

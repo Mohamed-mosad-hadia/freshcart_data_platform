@@ -19,3 +19,4 @@ tzdata==2026.5
 tzlocal==5.4.4
 urllib3==2.8.0
 python-dotenv==1.2.1
+astronomer-cosmos>=1.11,<2

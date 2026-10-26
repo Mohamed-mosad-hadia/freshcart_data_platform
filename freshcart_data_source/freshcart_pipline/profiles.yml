@@ -1,0 +1,15 @@
+# dbt profile used by Airflow (Cosmos) inside Docker. No secrets here: every value comes
+# from the environment variables docker-compose.yml passes to the Airflow containers.
+# Local runs keep using ~/.dbt/profiles.yml (dbt only reads this file with --profiles-dir).
+freshcart_pipeline:
+  target: airflow
+  outputs:
+    airflow:
+      type: clickhouse
+      host: "{{ env_var('CH_HOST') }}"
+      port: "{{ env_var('CH_PORT') | int }}"
+      user: "{{ env_var('CH_USER') }}"
+      password: "{{ env_var('CLICKHOUSE_PASSWORD') }}"
+      schema: freshcart_dwh
+      secure: false
+      threads: 4
