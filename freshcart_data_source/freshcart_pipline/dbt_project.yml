@@ -25,4 +25,9 @@ models:
         +schema: silver_suppliers
     gold:
       +materialized: table
-      +schema: gold
+      core: # shared dimensions + daily FX rates
+        +schema: gold_core
+      sales: # orders, order items, payments
+        +schema: gold_sales
+      inventory: # supplier stock
+        +schema: gold_inventory

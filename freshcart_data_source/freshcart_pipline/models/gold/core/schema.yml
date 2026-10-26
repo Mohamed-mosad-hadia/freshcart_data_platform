@@ -1,0 +1,173 @@
+version: 2
+
+models:
+  - name: dim_date
+    description: >
+      Calendar dimension: one row per Cairo calendar day from 2023-01-01 (first FX rate)
+      to today. Generated (not derived from orders), so every day exists even without
+      orders. Weekend = Friday and Saturday.
+    columns:
+      - name: date_day
+        description: Calendar day (Cairo business day). Join facts on their Cairo date.
+        data_tests: [unique, not_null]
+      - name: year
+        description: Calendar year.
+      - name: quarter
+        description: Calendar quarter (1-4).
+      - name: month
+        description: Month number (1-12).
+      - name: month_name
+        description: Month name (January ...).
+      - name: month_start
+        description: First day of the month.
+      - name: week_start
+        description: Monday of the week.
+      - name: day_of_month
+        description: Day of the month (1-31).
+      - name: day_of_week
+        description: 1 = Monday ... 7 = Sunday.
+      - name: day_name
+        description: Weekday name (Monday ...).
+      - name: is_weekend
+        description: True on Friday and Saturday.
+        data_tests: [not_null]
+      - name: is_fx_business_day
+        description: True when the FX provider published a rate for this day (Sunday to Thursday).
+        data_tests: [not_null]
+
+  - name: dim_stores
+    description: One row per store (7 stores; store 7 Cairo - Heliopolis opened 2026-10-19) with its local currency.
+    columns:
+      - name: store_id
+        description: Store identifier.
+        data_tests: [unique, not_null]
+      - name: store_name
+        description: Store name.
+      - name: city
+        description: City of the store.
+      - name: country
+        description: Country code (EG, SA, AE).
+      - name: currency
+        description: Local currency of the store (EGP, SAR, AED); all local amounts are in this currency.
+        data_tests: [not_null]
+      - name: opened_on
+        description: Opening day of the store.
+
+  - name: dim_customers
+    description: >
+      One row per person. Duplicate accounts are merged (one account per email, orders
+      remapped in silver) and QA test accounts are excluded, so counting customer_id
+      counts real people.
+    columns:
+      - name: customer_id
+        description: Customer identifier (one per person).
+        data_tests: [unique, not_null]
+      - name: first_name
+        description: First name.
+      - name: last_name
+        description: Last name.
+      - name: email
+        description: Lowercase email, unique.
+        data_tests: [unique]
+      - name: phone
+        description: Phone in international format (+20..., +966...).
+      - name: city
+        description: Customer city.
+      - name: signup_date
+        description: Signup date.
+
+  - name: dim_products
+    description: Current product attributes (type 1) with category and supplier. Price history is in dim_product_price_history.
+    columns:
+      - name: product_id
+        description: Product identifier.
+        data_tests: [unique, not_null]
+      - name: product_name
+        description: Product name.
+      - name: size_label
+        description: Pack size taken from the name (500g, 1kg, 1L, 6-pack).
+      - name: category
+        description: Product category.
+        data_tests: [not_null]
+      - name: supplier
+        description: FRESH or GENERAL (each product has exactly one supplier).
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ["FRESH", "GENERAL"]
+      - name: current_unit_price_usd
+        description: Current catalogue price in USD.
+      - name: is_active
+        description: Catalogue flag only; inactive products are still sold, never filter sales on it.
+
+  - name: dim_product_price_history
+    description: >
+      Product price history, SCD type 2: one row per product price version with
+      valid_from / valid_to (UTC) and is_current. Price in effect for an order:
+      placed_at >= valid_from and (placed_at < valid_to or valid_to is null).
+    columns:
+      - name: product_price_key
+        description: Surrogate key of the price version (hash of product_id and valid_from).
+        data_tests: [unique, not_null]
+      - name: product_id
+        description: Product identifier.
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_products')
+                field: product_id
+      - name: product_name
+        description: Product name.
+      - name: category
+        description: Product category.
+      - name: price_version
+        description: 1, 2, 3 ... per product.
+      - name: unit_price_usd
+        description: Catalogue price in USD during this version.
+        data_tests: [not_null]
+      - name: valid_from
+        description: Start of the version (UTC).
+        data_tests: [not_null]
+      - name: valid_to
+        description: End of the version (UTC), NULL for the current price.
+      - name: is_current
+        description: True for the price valid now.
+
+  - name: fct_fx_rates_daily
+    description: >
+      Exchange rate for every calendar day and currency (units of currency per 1 USD),
+      built from silver_history. Days without a published rate (Friday, Saturday, today
+      before 16:00) carry the last published rate forward. Includes USD = 1.
+      Convert local amounts with amount_usd = amount_local / rate_per_usd.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [date_day, currency]
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "rate_per_usd > 0"
+    columns:
+      - name: date_day
+        description: Calendar day (Cairo).
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_date')
+                field: date_day
+      - name: currency
+        description: Currency code (EGP, SAR, AED, USD).
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ["EGP", "SAR", "AED", "USD"]
+      - name: rate_per_usd
+        description: Units of the currency per 1 USD valid on date_day.
+        data_tests: [not_null]
+      - name: source_rate_date
+        description: Publication date of the rate used (equals date_day on business days).
+      - name: is_carried_forward
+        description: True when the rate comes from an earlier business day (weekend or not yet published).

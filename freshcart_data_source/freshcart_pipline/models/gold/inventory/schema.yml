@@ -1,0 +1,59 @@
+version: 2
+
+models:
+  - name: fct_stock_daily
+    description: >
+      Daily stock snapshot: one row per product, store and day (units on the shelf at
+      22:00), from the FRESH and GENERAL supplier files. Rows for days before the store
+      opened are excluded. Stockout = quantity 0; 'N/A' quantities are not stockouts.
+      Answers stockouts per store, category and supplier (group by store_id, category, supplier).
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [stock_date, store_id, product_id]
+    columns:
+      - name: stock_date
+        description: Day of the stock count.
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_date')
+                field: date_day
+      - name: store_id
+        description: Store.
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_stores')
+                field: store_id
+      - name: product_id
+        description: Product.
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_products')
+                field: product_id
+      - name: supplier
+        description: FRESH or GENERAL.
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ["FRESH", "GENERAL"]
+      - name: category
+        description: Product category.
+      - name: quantity_on_hand
+        description: Units on the shelf; NULL when the supplier sent 'N/A'.
+      - name: reorder_level
+        description: Supplier minimum quantity.
+      - name: unit_cost
+        description: GENERAL unit cost from 2026-10-17 (likely USD), NULL otherwise.
+      - name: is_stockout
+        description: Quantity on hand is 0.
+        data_tests: [not_null]
+      - name: is_below_reorder
+        description: Quantity on hand below the reorder level.
+      - name: is_qty_missing
+        description: Quantity not counted ('N/A').

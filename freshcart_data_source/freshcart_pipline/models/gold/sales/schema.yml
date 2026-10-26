@@ -1,0 +1,169 @@
+version: 2
+
+models:
+  - name: fct_orders
+    description: >
+      One row per order (Cairo order day). Net revenue = order lines of delivered orders
+      minus refunds on those orders; cancelled and open orders have 0 net revenue.
+      Amounts in the store's local currency and in USD (rate of the order day). Orders
+      whose lines arrive late may show 0 lines until the next nightly run.
+    columns:
+      - name: order_id
+        description: Order identifier.
+        data_tests: [unique, not_null]
+      - name: customer_id
+        description: Customer (one per person).
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_customers')
+                field: customer_id
+      - name: store_id
+        description: Store of the order.
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_stores')
+                field: store_id
+      - name: currency
+        description: Local currency of the store.
+      - name: order_date
+        description: Cairo business day of placed_at.
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_date')
+                field: date_day
+      - name: placed_at
+        description: Order time (UTC).
+      - name: delivered_at
+        description: Delivery time (UTC), NULL if not delivered.
+      - name: order_status
+        description: placed, delivered or cancelled.
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ["placed", "delivered", "cancelled"]
+      - name: is_delivered
+        description: True for delivered orders (the only ones with revenue).
+      - name: promo_code
+        description: Promo code used, if any.
+      - name: item_lines
+        description: Number of order lines.
+      - name: items_quantity
+        description: Total units in the order.
+      - name: order_amount_local
+        description: Basket value (sum of line_amount) in local currency.
+      - name: refunded_amount_local
+        description: Refunds on this order, counted only for delivered orders.
+      - name: net_revenue_local
+        description: Basket minus refunds for delivered orders, 0 otherwise (local currency).
+      - name: rate_per_usd
+        description: Local currency units per 1 USD on the order day.
+        data_tests: [not_null]
+      - name: order_amount_usd
+        description: Basket value in USD.
+      - name: net_revenue_usd
+        description: Net revenue in USD.
+      - name: delivery_minutes
+        description: Minutes between placed_at and delivered_at (delivered orders only).
+
+  - name: fct_payments
+    description: >
+      One row per payment or refund, on the Cairo day the money moved (paid_at).
+      signed_amount is positive for payments and negative for refunds, so its sum is cash
+      collected. Payments of orders not loaded yet (late-arriving) appear the next night.
+    columns:
+      - name: payment_id
+        description: Payment identifier.
+        data_tests: [unique, not_null]
+      - name: order_id
+        description: Order paid or refunded.
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('fct_orders')
+                field: order_id
+      - name: customer_id
+        description: Customer of the order.
+      - name: store_id
+        description: Store of the order.
+        data_tests: [not_null]
+      - name: currency
+        description: Local currency of the store.
+      - name: order_status
+        description: Status of the order paid or refunded.
+      - name: payment_date
+        description: Cairo business day of paid_at (cash day).
+        data_tests: [not_null]
+      - name: paid_at
+        description: Time the money moved (UTC).
+      - name: payment_method
+        description: card, wallet or cash.
+      - name: payment_status
+        description: paid or refunded.
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ["paid", "refunded"]
+      - name: amount_local
+        description: Amount (always positive) in local currency.
+      - name: signed_amount_local
+        description: +amount for paid, -amount for refunded (local currency).
+      - name: rate_per_usd
+        description: Local currency units per 1 USD on the payment day.
+        data_tests: [not_null]
+      - name: signed_amount_usd
+        description: Signed amount in USD.
+
+  - name: agg_store_daily
+    description: >
+      One row per store and Cairo day, from the store's opening day to today. Answers the
+      business questions: net revenue and cash collected per store and day in local
+      currency and USD, number of orders, average basket, delivery time and unique customers.
+      Days without orders or payments have NULL measures.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [store_id, date_day]
+    columns:
+      - name: date_day
+        description: Cairo business day.
+        data_tests: [not_null]
+      - name: store_id
+        description: Store.
+        data_tests: [not_null]
+      - name: store_name
+        description: Store name.
+      - name: currency
+        description: Local currency of the store.
+      - name: orders_placed
+        description: Orders placed that day (all statuses).
+      - name: orders_delivered
+        description: Orders placed that day and delivered.
+      - name: orders_cancelled
+        description: Orders placed that day and cancelled.
+      - name: unique_customers
+        description: Distinct customers (people) who ordered that day.
+      - name: net_revenue_local
+        description: Net revenue of orders placed that day (local currency).
+      - name: net_revenue_usd
+        description: Net revenue in USD.
+      - name: cash_in_local
+        description: Payments received that day (local currency).
+      - name: refunds_out_local
+        description: Refunds paid out that day (local currency).
+      - name: cash_collected_local
+        description: Payments minus refunds that day (local currency).
+      - name: cash_collected_usd
+        description: Cash collected in USD.
+      - name: avg_basket_local
+        description: Average basket of delivered orders (local currency).
+      - name: avg_basket_usd
+        description: Average basket in USD.
+      - name: avg_delivery_minutes
+        description: Average delivery time of delivered orders, in minutes.

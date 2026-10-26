@@ -88,7 +88,6 @@ default_args = {
     "depends_on_past": True,               # Backfill runs in chronological order
 
     "start_date": datetime(2026, 10, 13),  # Course start date for backfilling
-    "end_date": datetime(2026, 10, 26),    # Course end date
     "retries": 3,
     "retry_delay": timedelta(minutes=1),
     # Alerting
