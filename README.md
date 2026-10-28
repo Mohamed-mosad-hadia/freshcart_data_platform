@@ -1,66 +1,153 @@
 # FreshCart Data Platform Documentation
 
-## Project Overview
-FreshCart is a real-time grocery delivery platform operating across 6 cities. This project implements a robust Data Engineering platform to transition FreshCart from slow, manual SQL reporting on production databases to an automated, scalable data warehouse.
+## Table of Contents
+1. [Project Title and Overview](#1-project-title-and-overview)
+2. [Key Features](#2-key-features)
+3. [Tech Stack](#3-tech-stack)
+4. [Architecture](#4-architecture)
+5. [Project Structure](#5-project-structure)
+6. [Getting Started](#6-getting-started)
+7. [Usage](#7-usage)
+8. [Database](#8-database)
+9. [Testing](#9-testing)
+10. [Deployment & CI/CD](#10-deployment--cicd)
+11. [Configuration & Environment Variables](#11-configuration--environment-variables)
+12. [Security and Best Practices](#12-security-and-best-practices)
+13. [Troubleshooting / FAQ](#13-troubleshooting--faq)
+14. [License and Contact](#14-license-and-contact)
 
-The platform extracts data from production PostgreSQL databases, external CSV supplier files, and a live FX Rate API, orchestrating the pipeline through Airflow. It processes data incrementally, cleans it into silver layers, and models it into a star schema gold layer for business analytics.
+---
 
-## Architecture
+## 1. Project Title and Overview
+**FreshCart Data Platform** is an enterprise-grade data engineering capstone project designed for FreshCart, a real-time grocery delivery company.
+
+**The Problem:** Management previously lacked reliable numbers, and Finance ran slow reports directly on the production database. 
+**The Solution:** This project builds an automated, scalable data warehouse platform that ingests live transaction data, supplier CSV files, and exchange rates, processes them through tiered transformations (Bronze, Silver, Gold), and orchestrates nightly pipelines using Apache Airflow.
+
+---
+
+## 2. Key Features
+*   **Incremental & Idempotent Ingestion**: Handles data loading daily with protection against duplicates.
+*   **Star Schema Modeling**: Gold layer structured for high-performance business analytics (Revenue, Stockouts, Order Tracking).
+*   **Automated Backfilling**: Native Airflow support to re-process historical data (`catchup=True`).
+*   **Failure Resilience**: Automatic retries, Gmail/SMTP failure alerts, and custom sensors for supplier file availability.
+*   **Quality Assurance**: Automated dbt testing and data reconciliation pipelines.
+
+---
+
+## 3. Tech Stack
+| Layer / Tool | Technology | Purpose |
+| :--- | :--- | :--- |
+| **Language** | Python 3.x | Custom extraction, loaders, and Airflow task definitions. |
+| **Warehouse** | ClickHouse | High-performance analytical data storage (Silver/Gold). |
+| **Metadata DB** | PostgreSQL | Airflow state management and metadata. |
+| **Transformation** | dbt (data build tool) | Modular data transformations, testing, and documentation. |
+| **Orchestration** | Apache Airflow | Pipeline scheduling, dependency mapping, and sensor management. |
+| **Infrastructure** | Docker & Docker Compose | Containerized execution environment. |
+
+---
+
+## 4. Architecture
+```mermaid
+graph LR
+    SourceDB[(Source PostgreSQL)] --> Loader[Python Extract & Load]
+    CSV[Supplier CSV Files] --> Loader
+    FXAPI[FX Rate API] --> Loader
+    Loader --> Bronze[(Bronze/ClickHouse)]
+    Bronze --> dbt[dbt Transformations]
+    dbt --> Silver[(Silver/ClickHouse)]
+    dbt --> Gold[(Gold/ClickHouse)]
+    Gold --> Dashboards[SQL Analytics / Dashboards]
+    subgraph "Apache Airflow Orchestration"
+    Loader
+    dbt
+    end
 ```
- Source DB ──┐                                                  ┌─► Dashboards / SQL
- CSV Files ──┼─► Python Extract & Load ─► BRONZE ─► dbt ─► SILVER ─► dbt ─► GOLD
- FX API    ──┘                          (Raw)          (Clean)        (Star Schema)
-                     All orchestrated by Airflow; Everything runs in Docker
+
+---
+
+## 5. Project Structure
+```text
+freshcart_data_source/
+├── dags/                  # Airflow workflow definitions (Ingestion & dbt DAGs)
+├── freshcart_pipline/     # dbt project directory (models, seeds, snapshots, tests)
+├── ingestion/             # Python modules for DB, API, and supplier CSV extraction
+├── simulator/             # Dockerized real-time company operations simulator
+├── sql_tuning/            # SQL query optimization challenges and solutions
+├── docs/                  # Architecture notes, project brief, and incident postmortems
+└── graphify-out/          # Knowledge graph output and Obsidian vault for codebase navigation
 ```
 
-## Technology Stack
-- **Orchestration**: Apache Airflow
-- **Data Modeling**: dbt (data build tool)
-- **Database**: PostgreSQL (Warehouse)
-- **Data Extraction**: Python
-- **Environment/Infrastructure**: Docker, Docker Compose
+---
 
-## Project Components
-1. **Source Connectors (Python)**:
-   - **Database Loader**: Extracts data from PostgreSQL (`freshcart_source`).
-   - **Supplier Loader**: Processes incoming CSV stock files from suppliers.
-   - **FX API Loader**: Fetches exchange rates to convert local currencies to USD.
-2. **dbt Models**:
-   - **Bronze**: Raw data ingest, preserves source integrity.
-   - **Silver**: Data cleaning, deduplication, and anomaly flagging.
-   - **Gold**: Star schema models answering core business questions (revenue, orders, stockouts, price history).
-3. **Airflow DAG**:
-   - Automated nightly processing of daily data batches.
-   - Handles dependency management, retries, sensors (for file availability), and alerts.
+## 6. Getting Started
 
-## Getting Started
+### Prerequisites
+- Docker & Docker Compose installed on your host machine.
 
-### Starting the Project
-To initialize and run the entire environment:
-```bash
-docker-compose up -d --build
-```
-*Note: The initial start-up may take approximately 25 minutes.*
+### Installation Steps
+1. Clone the repository.
+2. Initialize and start all services via Docker Compose:
+   ```bash
+   docker-compose up -d --build
+   ```
+   *Note: Initial start-up takes approximately 25 minutes as historical data is generated and seeded.*
 
-### Managing the Project
-- **View Simulator Status**:
+---
+
+## 7. Usage
+- **Check Simulator Status**:
   ```bash
   docker-compose exec simulator python -m simulator status
   ```
 - **Access FX API Documentation**: 
-  Open `http://localhost:8000/docs` in your browser. Use the key: `freshcart-fx-key`.
-- **View Simulator Logs**:
-  ```bash
-  docker-compose logs -f simulator
-  ```
+  Open `http://localhost:8000/docs` in your browser. Use the API key: `freshcart-fx-key`.
+- **View Airflow UI**:
+  Navigate to `http://localhost:8080` (or configured port) to monitor DAG runs and task logs.
 
-### Stopping the Project
-To stop the services while preserving your data volumes:
-```bash
-docker-compose down
-```
+---
 
-## Knowledge Retrieval
-This project includes a knowledge graph (`graphify-out/`) that serves as an RAG system for codebase exploration. Use it to find architectural relationships and project context:
-- Run `/graphify query "<question>"` to trace data flows or explain components.
-- Refer to `graphify-out/GRAPH_REPORT.md` for core system abstractions.
+## 8. Database
+- **ClickHouse Warehouse**: The primary analytical engine for the platform.
+- **Silver Schema**: Cleaned, deduplicated tables with standardized schemas and anomaly flags.
+- **Gold Schema**: Star schema dimensions and fact tables optimized for business intelligence queries.
+
+---
+
+## 9. Testing
+- **dbt Testing**: Executed automatically post-model build via Astronomer Cosmos (`test_behavior=TestBehavior.AFTER_EACH`). Includes primary key uniqueness, relationship constraints, and custom reconciliation tests.
+
+---
+
+## 10. Deployment & CI/CD
+- **Deployment**: Fully containerized using Docker Compose for local simulation and deployment readiness.
+- **CI/CD Pipeline**: *TODO: Automated remote CI/CD pipelines (GitHub Actions/GitLab CI) are not yet configured.*
+
+---
+
+## 11. Configuration & Environment Variables
+Key configurations are managed via the `.env` file:
+| Variable Name | Description | Required | Example Value |
+| :--- | :--- | :--- | :--- |
+| `SOURCE_DB_PASSWORD` | Production DB password | Yes | `freshcart` |
+| `CLICKHOUSE_PASSWORD`| ClickHouse Warehouse password | Yes | `freshcart_ch_pass` |
+| `FX_API_KEY` | Exchange-rate provider token | Yes | `freshcart-fx-key` |
+| `ALERT_EMAIL_USER` | Gmail account for failure notifications | Yes | `user@gmail.com` |
+
+---
+
+## 12. Security and Best Practices
+- **Read-Only Access**: Analytics and ingestion pipelines utilize read-only database accounts to protect production data.
+- **Secrets Management**: Sensitive credentials are stored in environment variables (`.env`) and injected securely into containers.
+
+---
+
+## 13. Troubleshooting / FAQ
+- **Missing Data**: Run `docker-compose exec simulator python -m simulator status` to verify the simulator is producing daily orders.
+- **Vertical Scrolling Issues**: Use Windows Terminal instead of the legacy console to correctly handle ANSI escape sequences.
+
+---
+
+## 14. License and Contact
+- **License**: *TODO: Add a formal LICENSE file.*
+- **Contact**: Data Engineering Team - Ahmed Nabil & Mohamed Mosaad.
