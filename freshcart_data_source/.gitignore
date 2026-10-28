@@ -35,3 +35,4 @@ dbt/logs/
 .claude/skills/altimate-datamate/
 .agent/
 .vscode/
+.graphify-out/
