@@ -8,13 +8,16 @@
 5. [Project Structure](#5-project-structure)
 6. [Getting Started](#6-getting-started)
 7. [Usage](#7-usage)
-8. [Database](#8-database)
-9. [Testing](#9-testing)
-10. [Deployment & CI/CD](#10-deployment--cicd)
-11. [Configuration & Environment Variables](#11-configuration--environment-variables)
-12. [Security and Best Practices](#12-security-and-best-practices)
-13. [Troubleshooting / FAQ](#13-troubleshooting--faq)
-14. [License and Contact](#14-license-and-contact)
+8. [Database & Data Ingestion](#8-database--data-ingestion)
+9. [Apache Airflow Orchestration](#9-apache-airflow-orchestration)
+10. [dbt Transformations](#10-dbt-transformations)
+11. [Docker & Docker Compose Setup](#11-docker--docker-compose-setup)
+12. [Testing & Quality Assurance](#12-testing--quality-assurance)
+13. [Deployment & Configuration](#13-deployment--configuration)
+14. [Security & Best Practices](#14-security--best-practices)
+15. [Knowledge Graph Insights](#15-knowledge-graph-insights)
+16. [Troubleshooting / FAQ](#16-troubleshooting--faq)
+17. [License and Contact](#17-license-and-contact)
 
 ---
 
@@ -83,13 +86,13 @@ freshcart_data_source/
 ## 6. Getting Started
 
 ### Prerequisites
-- Docker & Docker Compose installed on your host machine.
+- Docker & Docker Compose installed on your host machine (with at least 8GB memory and 20GB disk).
 
 ### Installation Steps
 1. Clone the repository.
 2. Initialize and start all services via Docker Compose:
    ```bash
-   docker-compose up -d --build
+   docker compose up -d --build
    ```
    *Note: Initial start-up takes approximately 25 minutes as historical data is generated and seeded.*
 
@@ -98,34 +101,86 @@ freshcart_data_source/
 ## 7. Usage
 - **Check Simulator Status**:
   ```bash
-  docker-compose exec simulator python -m simulator status
+  docker compose exec simulator python -m simulator status
   ```
 - **Access FX API Documentation**: 
   Open `http://localhost:8000/docs` in your browser. Use the API key: `freshcart-fx-key`.
 - **View Airflow UI**:
-  Navigate to `http://localhost:8080` (or configured port) to monitor DAG runs and task logs.
+  Navigate to `http://localhost:8080` (Username: `airflow`, Password: `airflow`) to monitor DAG runs and task logs.
 
 ---
 
-## 8. Database
-- **ClickHouse Warehouse**: The primary analytical engine for the platform.
-- **Silver Schema**: Cleaned, deduplicated tables with standardized schemas and anomaly flags.
-- **Gold Schema**: Star schema dimensions and fact tables optimized for business intelligence queries.
+## 8. Database & Data Ingestion
+
+The ingestion framework extracts data from the three primary sources and loads them into the ClickHouse data warehouse under the **Bronze layer**:
+
+### A. Database Ingestion (`ingestion/database/Ingest_app.py`)
+- **Purpose**: Extracts operational data (orders, customers, products) from the PostgreSQL production database (`source-db:5432`) into ClickHouse.
+- **Key Functions**:
+  - `extract(t, start, end)`: Queries source tables incrementally or in full loads using SQLAlchemy.
+  - `write(t, rows)`: Batch loads records into ClickHouse (`freshcart_dwh`).
+  - `run_database_ingestion()`: Coordinates historical and incremental synchronization with Cairo timezone awareness (`cairo_midnight_utc`).
+
+### B. Supplier File Ingestion (`ingestion/suppliers/`)
+- **Purpose**: Ingests incoming supplier CSV files (`source_files/suppliers/fresh/` and `general/`).
+- **Modules**:
+  - `DDL/DDL_fresh_suppliers.py` & `DDL_general_suppliers.py`: Dynamically inspects CSV headers, hashes schemas, ensures idempotent ClickHouse table creation (`bronze_suppliers`), and maintains an `ingested_files` deduplication ledger.
+  - `Load/Load_fresh_suppliers.py` & `Load_general_suppliers.py`: Parses incoming CSVs, computes file digests (`sha256`), checks the ledger, and loads new rows with full metadata (`batch_id`, `source_file`, `source_row_number`, `ingested_at`).
+
+### C. Exchange Rate API Ingestion (`ingestion/fx_api/`)
+- **Purpose**: Collects current and historical currency exchange rates from the `fx-api` service (`http://fx-api:8000`).
+- **Modules**:
+  - `DDL/`: Defines raw Bronze tables (`rates`, `history`, `currencies`, `health_check`) in `bronze_fx_api`.
+  - `Load/history.py`: Fetches 30-day historical windows using robust retry adapters (`urllib3` / `requests`) and idempotent payload insertion.
+  - `connection_clickhouse.py`: Shared database connector wrapper (`CHClient`) providing `clickhouse-connect` integration with standard `.execute()` syntax.
 
 ---
 
-## 9. Testing
+## 9. Apache Airflow Orchestration
+
+Airflow orchestrates the entire data pipeline (`dags/Ingedtion_dag.py`):
+- **Executors & Backend**: Configured with **CeleryExecutor**, backed by **PostgreSQL** (`postgres`) and message brokered by **Redis**.
+- **DAG Workflow**:
+  1. **Supplier Files Sensor / Trigger (`supplier_files_ready`)**: Detects new supplier CSV arrivals and triggers ingestion tasks.
+  2. **Database Ingestion Task**: Runs scheduled incremental extracts from PostgreSQL to ClickHouse.
+  3. **FX API Ingestion Task**: Pulls currency rates daily.
+  4. **dbt Transformation Tasks**: Triggered downstream via Cosmos/Airflow operators to build Silver and Gold data models.
+- **Alerting**: Integrated Gmail SMTP alerts (`task_failure_alert`) for task failures.
+
+---
+
+## 10. dbt Transformations (`freshcart_pipline`)
+
+Transformed models reside inside ClickHouse and are managed via dbt:
+- **Sources (`models/source.yaml`)**: Points to Bronze tables (`bronze_app`, `bronze_suppliers`, `bronze_fx_api`).
+- **Silver Layer (`models/silver/`)**: Cleaned, typed, and deduplicated staging models (e.g., `silver_history.sql`, `silver_orders`).
+- **Gold Layer (`models/gold/`)**: Dimensional models and analytics-ready business views (e.g., SCD Type 2 product price history `dim_product_price_history.sql`).
+
+---
+
+## 11. Docker & Docker Compose Setup (`docker-compose.yml`)
+
+The platform runs entirely containerized:
+- **The Company Stack**:
+  - `source-db` (Postgres 16 on port `5433` / `5432`)
+  - `simulator` (Generates orders & supplier files)
+  - `fx-api` (FastAPI exchange rate provider on port `8000`)
+- **Your Data Platform Stack**:
+  - `clickhouse` (ClickHouse server on HTTP port `8123` & Native port `9000`)
+  - `postgres` & `redis` (Airflow infrastructure)
+  - `airflow-apiserver`, `airflow-scheduler`, `airflow-worker`, `airflow-dag-processor`, `airflow-init` (Apache Airflow 3.2.1 ecosystem on port `8080`)
+  - `flower` (Celery monitoring on port `5555`)
+
+---
+
+## 12. Testing & Quality Assurance
 - **dbt Testing**: Executed automatically post-model build via Astronomer Cosmos (`test_behavior=TestBehavior.AFTER_EACH`). Includes primary key uniqueness, relationship constraints, and custom reconciliation tests.
 
 ---
 
-## 10. Deployment & CI/CD
-- **Deployment**: Fully containerized using Docker Compose for local simulation and deployment readiness.
-- **CI/CD Pipeline**: *TODO: Automated remote CI/CD pipelines (GitHub Actions/GitLab CI) are not yet configured.*
+## 13. Deployment & Configuration
 
----
-
-## 11. Configuration & Environment Variables
+### Environment Variables (.env)
 Key configurations are managed via the `.env` file:
 | Variable Name | Description | Required | Example Value |
 | :--- | :--- | :--- | :--- |
@@ -136,18 +191,25 @@ Key configurations are managed via the `.env` file:
 
 ---
 
-## 12. Security and Best Practices
+## 14. Security & Best Practices
 - **Read-Only Access**: Analytics and ingestion pipelines utilize read-only database accounts to protect production data.
 - **Secrets Management**: Sensitive credentials are stored in environment variables (`.env`) and injected securely into containers.
 
 ---
 
-## 13. Troubleshooting / FAQ
-- **Missing Data**: Run `docker-compose exec simulator python -m simulator status` to verify the simulator is producing daily orders.
+## 15. Knowledge Graph Insights (Graphify Analysis)
+Based on structural and semantic graph analysis of this repository (`533 nodes`, `1036 edges` across `40 communities`):
+- **Top God Nodes**: `environment` (Docker configuration & environment variables) and `connection_clickhouse()` (Central database connectivity backbone).
+- **Surprising Connections**: Conceptual bridges between the **Project Brief** and historical **Postmortems** (e.g., duplicate payments, FX outages, and supplier file layout changes).
+
+---
+
+## 16. Troubleshooting / FAQ
+- **Missing Data**: Run `docker compose exec simulator python -m simulator status` to verify the simulator is producing daily orders.
 - **Vertical Scrolling Issues**: Use Windows Terminal instead of the legacy console to correctly handle ANSI escape sequences.
 
 ---
 
-## 14. License and Contact
+## 17. License and Contact
 - **License**: *TODO: Add a formal LICENSE file.*
 - **Contact**: Data Engineering Team - Ahmed Nabil & Mohamed Mosaad.
