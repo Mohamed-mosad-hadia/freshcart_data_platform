@@ -35,7 +35,7 @@ dbt_dag = DbtDag(
     dag_id="dbt_dag",
     project_config=ProjectConfig(
         dbt_project_path=DBT_PROJECT,
-        manifest_path=DBT_MANIFEST,
+        manifest_path=DBT_MANIFEST
         # dbt packages (dbt_utils, dbt_expectations, codegen, dbt_date) are installed
         # at image build time, so no `dbt deps` at parse time or in every task.
         # If your Cosmos version supports it, also set install_dbt_deps=False here.
@@ -52,6 +52,7 @@ dbt_dag = DbtDag(
         load_method=LoadMode.DBT_MANIFEST,
         test_behavior=TestBehavior.AFTER_EACH,  # each model's tests right after it
         select=["path:models"],  # silver + gold models and their tests (no analyses)
+        group_nodes_by_folder=True
     ),
     # No install_deps: `dbt deps` ran at build time (saves ~17s per task).
     operator_args={},
