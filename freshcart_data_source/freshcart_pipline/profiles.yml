@@ -2,14 +2,15 @@
 # from the environment variables docker-compose.yml passes to the Airflow containers.
 # Local runs keep using ~/.dbt/profiles.yml (dbt only reads this file with --profiles-dir).
 freshcart_pipeline:
-  target: airflow
+  target: dev
   outputs:
-    airflow:
+    dev:
       type: clickhouse
-      host: "{{ env_var('CH_HOST') }}"
-      port: "{{ env_var('CH_PORT') | int }}"
-      user: "{{ env_var('CH_USER') }}"
-      password: "{{ env_var('CLICKHOUSE_PASSWORD') }}"
       schema: freshcart_dwh
+      host: localhost
+      port: 8123
+      user: freshcart_user
+      password: freshcart_ch_pass
       secure: false
-      threads: 4
+      verify: false
+      threads: 16
