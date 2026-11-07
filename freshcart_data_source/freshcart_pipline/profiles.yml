@@ -14,3 +14,13 @@ freshcart_pipeline:
       secure: false
       verify: false
       threads: 16
+    airflow:
+      type: clickhouse
+      schema: freshcart_dwh
+      host: "{{ env_var('CH_HOST') }}"
+      port: "{{ env_var('CH_PORT') | int }}"
+      user: "{{ env_var('CH_USER') }}"
+      password: "{{ env_var('CLICKHOUSE_PASSWORD') }}"
+      secure: false
+      verify: false
+      threads: 16
