@@ -36,3 +36,5 @@ dbt/logs/
 .agent/
 .vscode/
 graphify-out
+.windsurf/
+WARP.md

@@ -1,6 +1,7 @@
 # FreshCart Data Platform Documentation
 
 ## Table of Contents
+
 1. [Project Title and Overview](#1-project-title-and-overview)
 2. [Key Features](#2-key-features)
 3. [Tech Stack](#3-tech-stack)
@@ -10,47 +11,53 @@
 7. [Usage](#7-usage)
 8. [Database & Data Ingestion](#8-database--data-ingestion)
 9. [Apache Airflow Orchestration](#9-apache-airflow-orchestration)
-10. [dbt Transformations](#10-dbt-transformations)
-11. [Docker & Docker Compose Setup](#11-docker--docker-compose-setup)
-12. [Testing & Quality Assurance](#12-testing--quality-assurance)
-13. [Deployment & Configuration](#13-deployment--configuration)
-14. [Security & Best Practices](#14-security--best-practices)
-15. [Knowledge Graph Insights](#15-knowledge-graph-insights)
-16. [Troubleshooting / FAQ](#16-troubleshooting--faq)
-17. [License and Contact](#17-license-and-contact)
+11. [dbt Transformations & Data Modeling](#10-dbt-transformations--data-modeling)
+12. [Docker & Docker Compose Setup](#11-docker--docker-compose-setup)
+13. [Testing & Quality Assurance](#12-testing--quality-assurance)
+14. [Deployment & Configuration](#13-deployment--configuration)
+15. [Security & Best Practices](#14-security--best-practices)
+16. [Knowledge Graph Insights](#15-knowledge-graph-insights)
+17. [Troubleshooting / FAQ](#16-troubleshooting--faq)
+18. [License and Contact](#17-license-and-contact)
 
 ---
 
 ## 1. Project Title and Overview
+
 **FreshCart Data Platform** is an enterprise-grade data engineering capstone project designed for FreshCart, a real-time grocery delivery company.
 
-**The Problem:** Management previously lacked reliable numbers, and Finance ran slow reports directly on the production database. 
+**The Problem:** Management previously lacked reliable numbers, and Finance ran slow reports directly on the production database.
 **The Solution:** This project builds an automated, scalable data warehouse platform that ingests live transaction data, supplier CSV files, and exchange rates, processes them through tiered transformations (Bronze, Silver, Gold), and orchestrates nightly pipelines using Apache Airflow.
 
 ---
 
 ## 2. Key Features
-*   **Incremental & Idempotent Ingestion**: Handles data loading daily with protection against duplicates.
-*   **Star Schema Modeling**: Gold layer structured for high-performance business analytics (Revenue, Stockouts, Order Tracking).
-*   **Automated Backfilling**: Native Airflow support to re-process historical data (`catchup=True`).
-*   **Failure Resilience**: Automatic retries, Gmail/SMTP failure alerts, and custom sensors for supplier file availability.
-*   **Quality Assurance**: Automated dbt testing and data reconciliation pipelines.
+
+- **Incremental & Idempotent Ingestion**: Handles data loading daily with protection against duplicates.
+- **Star Schema Modeling**: Gold layer structured for high-performance business analytics (Revenue, Stockouts, Order Tracking).
+- **Automated Backfilling**: Native Airflow support to re-process historical data (`catchup=True`).
+- **Failure Resilience**: Automatic retries, Gmail/SMTP failure alerts, and custom sensors for supplier file availability.
+- **Quality Assurance**: Automated dbt testing and data reconciliation pipelines.
 
 ---
 
 ## 3. Tech Stack
-| Layer / Tool | Technology | Purpose |
-| :--- | :--- | :--- |
-| **Language** | Python 3.x | Custom extraction, loaders, and Airflow task definitions. |
-| **Warehouse** | ClickHouse | High-performance analytical data storage (Silver/Gold). |
-| **Metadata DB** | PostgreSQL | Airflow state management and metadata. |
-| **Transformation** | dbt (data build tool) | Modular data transformations, testing, and documentation. |
-| **Orchestration** | Apache Airflow | Pipeline scheduling, dependency mapping, and sensor management. |
-| **Infrastructure** | Docker & Docker Compose | Containerized execution environment. |
+
+| Layer / Tool       | Technology              | Purpose                                                         |
+| :----------------- | :---------------------- | :-------------------------------------------------------------- |
+| **Language**       | Python 3.x              | Custom extraction, loaders, and Airflow task definitions.       |
+| **Warehouse**      | ClickHouse              | High-performance analytical data storage (Silver/Gold).         |
+| **Metadata DB**    | PostgreSQL              | Airflow state management and metadata.                          |
+| **Transformation** | dbt (data build tool)   | Modular data transformations, testing, and documentation.       |
+| **Orchestration**  | Apache Airflow          | Pipeline scheduling, dependency mapping, and sensor management. |
+| **Infrastructure** | Docker & Docker Compose | Containerized execution environment.                            |
 
 ---
 
 ## 4. Architecture
+
+![FreshCart Data Platform Architecture](freshcart_data_platform_architecture.png)
+
 ```mermaid
 graph LR
     SourceDB[(Source PostgreSQL)] --> Loader[Python Extract & Load]
@@ -70,6 +77,7 @@ graph LR
 ---
 
 ## 5. Project Structure
+
 ```text
 freshcart_data_source/
 ├── dags/                  # Airflow workflow definitions (Ingestion & dbt DAGs)
@@ -86,24 +94,27 @@ freshcart_data_source/
 ## 6. Getting Started
 
 ### Prerequisites
+
 - Docker & Docker Compose installed on your host machine (with at least 8GB memory and 20GB disk).
 
 ### Installation Steps
+
 1. Clone the repository.
 2. Initialize and start all services via Docker Compose:
    ```bash
    docker compose up -d --build
    ```
-   *Note: Initial start-up takes approximately 25 minutes as historical data is generated and seeded.*
+   _Note: Initial start-up takes approximately 25 minutes as historical data is generated and seeded._
 
 ---
 
 ## 7. Usage
+
 - **Check Simulator Status**:
   ```bash
   docker compose exec simulator python -m simulator status
   ```
-- **Access FX API Documentation**: 
+- **Access FX API Documentation**:
   Open `http://localhost:8000/docs` in your browser. Use the API key: `freshcart-fx-key`.
 - **View Airflow UI**:
   Navigate to `http://localhost:8080` (Username: `airflow`, Password: `airflow`) to monitor DAG runs and task logs.
@@ -115,6 +126,7 @@ freshcart_data_source/
 The ingestion framework extracts data from the three primary sources and loads them into the ClickHouse data warehouse under the **Bronze layer**:
 
 ### A. Database Ingestion (`ingestion/database/Ingest_app.py`)
+
 - **Purpose**: Extracts operational data (orders, customers, products) from the PostgreSQL production database (`source-db:5432`) into ClickHouse.
 - **Key Functions**:
   - `extract(t, start, end)`: Queries source tables incrementally or in full loads using SQLAlchemy.
@@ -122,12 +134,14 @@ The ingestion framework extracts data from the three primary sources and loads t
   - `run_database_ingestion()`: Coordinates historical and incremental synchronization with Cairo timezone awareness (`cairo_midnight_utc`).
 
 ### B. Supplier File Ingestion (`ingestion/suppliers/`)
+
 - **Purpose**: Ingests incoming supplier CSV files (`source_files/suppliers/fresh/` and `general/`).
 - **Modules**:
   - `DDL/DDL_fresh_suppliers.py` & `DDL_general_suppliers.py`: Dynamically inspects CSV headers, hashes schemas, ensures idempotent ClickHouse table creation (`bronze_suppliers`), and maintains an `ingested_files` deduplication ledger.
   - `Load/Load_fresh_suppliers.py` & `Load_general_suppliers.py`: Parses incoming CSVs, computes file digests (`sha256`), checks the ledger, and loads new rows with full metadata (`batch_id`, `source_file`, `source_row_number`, `ingested_at`).
 
 ### C. Exchange Rate API Ingestion (`ingestion/fx_api/`)
+
 - **Purpose**: Collects current and historical currency exchange rates from the `fx-api` service (`http://fx-api:8000`).
 - **Modules**:
   - `DDL/`: Defines raw Bronze tables (`rates`, `history`, `currencies`, `health_check`) in `bronze_fx_api`.
@@ -139,6 +153,7 @@ The ingestion framework extracts data from the three primary sources and loads t
 ## 9. Apache Airflow Orchestration
 
 Airflow orchestrates the entire data pipeline (`dags/Ingedtion_dag.py`):
+
 - **Executors & Backend**: Configured with **CeleryExecutor**, backed by **PostgreSQL** (`postgres`) and message brokered by **Redis**.
 - **DAG Workflow**:
   1. **Supplier Files Sensor / Trigger (`supplier_files_ready`)**: Detects new supplier CSV arrivals and triggers ingestion tasks.
@@ -149,18 +164,39 @@ Airflow orchestrates the entire data pipeline (`dags/Ingedtion_dag.py`):
 
 ---
 
-## 10. dbt Transformations (`freshcart_pipline`)
+## 10. dbt Transformations & Data Modeling (`freshcart_pipline`)
 
 Transformed models reside inside ClickHouse and are managed via dbt:
+
 - **Sources (`models/source.yaml`)**: Points to Bronze tables (`bronze_app`, `bronze_suppliers`, `bronze_fx_api`).
 - **Silver Layer (`models/silver/`)**: Cleaned, typed, and deduplicated staging models (e.g., `silver_history.sql`, `silver_orders`).
 - **Gold Layer (`models/gold/`)**: Dimensional models and analytics-ready business views (e.g., SCD Type 2 product price history `dim_product_price_history.sql`).
+
+### Gold Layer Star Schema (ERD)
+
+![FreshCart Gold Layer ERD](freshcart_gold_star_schema_erd.png)
+
+The warehouse Gold layer is structured into dimensional models and fact tables:
+
+- **Dimensions (`gold_core`)**:
+  - `dim_date`: Calendar dimension with business day, weekend, and FX date attributes.
+  - `dim_stores`: Store locations, currencies, and activation metadata.
+  - `dim_customers`: Customer profile information and signup dates.
+  - `dim_products`: Product catalog attributes and active status.
+  - `dim_product_price_history`: SCD Type 2 dimension capturing historical price changes over time (`valid_from`, `valid_to`, `is_current`).
+- **Facts & Aggregations**:
+  - `fct_orders` (`gold_sales`): Order-level grain, enriched with local currency, exchange rates, USD revenue, and delivery time.
+  - `fct_payments` (`gold_sales`): Payment transactions mapped to orders, methods, and status.
+  - `agg_store_daily` (`gold_sales`): Daily store-level operational metrics (orders placed/delivered/cancelled, net revenue, cash collected, refunds, average basket).
+  - `fct_stock_daily` (`gold_inventory`): Daily store-product inventory levels, stockout flags, and reorder alerts.
+  - `fct_fx_rates_daily` (`gold_core`): Historical exchange rates per USD.
 
 ---
 
 ## 11. Docker & Docker Compose Setup (`docker-compose.yml`)
 
 The platform runs entirely containerized:
+
 - **The Company Stack**:
   - `source-db` (Postgres 16 on port `5433` / `5432`)
   - `simulator` (Generates orders & supplier files)
@@ -174,6 +210,7 @@ The platform runs entirely containerized:
 ---
 
 ## 12. Testing & Quality Assurance
+
 - **dbt Testing**: Executed automatically post-model build via Astronomer Cosmos (`test_behavior=TestBehavior.AFTER_EACH`). Includes primary key uniqueness, relationship constraints, and custom reconciliation tests.
 
 ---
@@ -181,6 +218,7 @@ The platform runs entirely containerized:
 ## 13. Deployment & Configuration
 
 ### Environment Variables (.env)
+
 Key configurations are managed via the `.env` file:
 | Variable Name | Description | Required | Example Value |
 | :--- | :--- | :--- | :--- |
@@ -192,24 +230,29 @@ Key configurations are managed via the `.env` file:
 ---
 
 ## 14. Security & Best Practices
+
 - **Read-Only Access**: Analytics and ingestion pipelines utilize read-only database accounts to protect production data.
 - **Secrets Management**: Sensitive credentials are stored in environment variables (`.env`) and injected securely into containers.
 
 ---
 
 ## 15. Knowledge Graph Insights (Graphify Analysis)
+
 Based on structural and semantic graph analysis of this repository (`533 nodes`, `1036 edges` across `40 communities`):
+
 - **Top God Nodes**: `environment` (Docker configuration & environment variables) and `connection_clickhouse()` (Central database connectivity backbone).
 - **Surprising Connections**: Conceptual bridges between the **Project Brief** and historical **Postmortems** (e.g., duplicate payments, FX outages, and supplier file layout changes).
 
 ---
 
 ## 16. Troubleshooting / FAQ
+
 - **Missing Data**: Run `docker compose exec simulator python -m simulator status` to verify the simulator is producing daily orders.
 - **Vertical Scrolling Issues**: Use Windows Terminal instead of the legacy console to correctly handle ANSI escape sequences.
 
 ---
 
 ## 17. License and Contact
-- **License**: *TODO: Add a formal LICENSE file.*
+
+- **License**: _TODO: Add a formal LICENSE file._
 - **Contact**: Data Engineering Team - Ahmed Nabil & Mohamed Mosaad.
