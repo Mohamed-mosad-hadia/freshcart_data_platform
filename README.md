@@ -11,14 +11,14 @@
 7. [Usage](#7-usage)
 8. [Database & Data Ingestion](#8-database--data-ingestion)
 9. [Apache Airflow Orchestration](#9-apache-airflow-orchestration)
-11. [dbt Transformations & Data Modeling](#10-dbt-transformations--data-modeling)
-12. [Docker & Docker Compose Setup](#11-docker--docker-compose-setup)
-13. [Testing & Quality Assurance](#12-testing--quality-assurance)
-14. [Deployment & Configuration](#13-deployment--configuration)
-15. [Security & Best Practices](#14-security--best-practices)
-16. [Knowledge Graph Insights](#15-knowledge-graph-insights)
-17. [Troubleshooting / FAQ](#16-troubleshooting--faq)
-18. [License and Contact](#17-license-and-contact)
+10. [dbt Transformations & Data Modeling](#10-dbt-transformations--data-modeling)
+11. [Docker & Docker Compose Setup](#11-docker--docker-compose-setup)
+12. [Testing & Quality Assurance](#12-testing--quality-assurance)
+13. [Deployment & Configuration](#13-deployment--configuration)
+14. [Security & Best Practices](#14-security--best-practices)
+15. [Knowledge Graph Insights](#15-knowledge-graph-insights)
+16. [Troubleshooting / FAQ](#16-troubleshooting--faq)
+17. [License and Contact](#17-license-and-contact)
 
 ---
 
@@ -174,7 +174,7 @@ Transformed models reside inside ClickHouse and are managed via dbt:
 
 ### Gold Layer Star Schema (ERD)
 
-![FreshCart Gold Layer ERD](freshcart_gold_star_schema_erd.png)
+![FreshCart Gold Layer ERD](Gold_Layer.png)
 
 The warehouse Gold layer is structured into dimensional models and fact tables:
 
