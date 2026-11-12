@@ -155,3 +155,11 @@ with DAG(
     # dbt (dbt_dag) starts only when all three sources succeeded.
     Wait_for_supplier_files >> Supplier_Ingestion_dag
     [Database_Ingestion_dag, Fx_api_ingestion_dag, Supplier_Ingestion_dag] >> Bronze_loaded
+
+
+
+
+
+
+
+# LOOOOOOOOOOOOOOOOOOOOOOOL
